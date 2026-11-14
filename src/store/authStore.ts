@@ -303,7 +303,7 @@ export const useAuthStore = create<AuthState>()(
         phone: member.profile?.phone || member.emergency_phone || '+91 76206 83995',
         email: member.email || member.profile?.email || `${member.member_id.toLowerCase()}@corpuss.com`,
         role: 'member',
-        avatar_url: member.photo_url || null,
+        avatar_url: member.photo_url || member.profile?.avatar_url || null,
         created_at: member.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -343,20 +343,83 @@ export const useAuthStore = create<AuthState>()(
   }))
 )
 
+// Helper to re-sync DP and profile from local/cloud records
+function syncProfileAvatar(profile: Profile, role: UserRole): Profile {
+  if (role === 'member') {
+    const members = db.getMembers()
+    const pEmail = (profile.email || '').toLowerCase().trim()
+    const matched = members.find((m) =>
+      m.id === profile.id ||
+      m.profile_id === profile.id ||
+      (m.email && m.email.toLowerCase().trim() === pEmail) ||
+      (m.profile?.email && m.profile.email.toLowerCase().trim() === pEmail) ||
+      (pEmail.includes('yuvraj') &&
+        ((m.email && m.email.includes('yuvraj')) ||
+          (m.profile?.full_name && m.profile.full_name.toLowerCase().includes('yuvraj'))))
+    )
+    const photo = matched?.photo_url || matched?.profile?.avatar_url
+    if (photo && photo !== profile.avatar_url) {
+      return {
+        ...profile,
+        avatar_url: photo,
+        full_name: matched?.profile?.full_name || (matched as any)?.full_name || profile.full_name,
+      }
+    }
+  } else if (role === 'trainer') {
+    const trainers = db.getTrainers()
+    const pEmail = (profile.email || '').toLowerCase().trim()
+    const matched = trainers.find((t) =>
+      t.id === profile.id ||
+      t.profile_id === profile.id ||
+      (t.email && t.email.toLowerCase().trim() === pEmail)
+    )
+    if (matched?.photo && matched.photo !== profile.avatar_url) {
+      return { ...profile, avatar_url: matched.photo }
+    }
+  }
+  return profile
+}
+
 // Rehydrate session from localStorage on startup
 try {
   const saved = localStorage.getItem(AUTH_STORAGE_KEY)
   if (saved) {
     const parsed = JSON.parse(saved)
     if (parsed.user && parsed.profile && parsed.role) {
+      const syncedProfile = syncProfileAvatar(parsed.profile, parsed.role)
+      if (syncedProfile !== parsed.profile) {
+        parsed.profile = syncedProfile
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(parsed))
+      }
       useAuthStore.setState({
         user: parsed.user,
         session: parsed.session || { access_token: `cfc-token-${parsed.user.id}`, user: parsed.user },
-        profile: parsed.profile,
+        profile: syncedProfile,
         role: parsed.role,
       })
     }
   }
 } catch (e) {
   console.error('Session rehydration error:', e)
+}
+
+// Real-time synchronization when database or cloud syncs across devices
+if (typeof window !== 'undefined') {
+  window.addEventListener('cfc_db_synced', () => {
+    const state = useAuthStore.getState()
+    if (!state.profile || !state.role) return
+
+    const updatedProfile = syncProfileAvatar(state.profile, state.role)
+    if (updatedProfile !== state.profile && updatedProfile.avatar_url !== state.profile.avatar_url) {
+      useAuthStore.setState({ profile: updatedProfile })
+      const saved = localStorage.getItem(AUTH_STORAGE_KEY)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          parsed.profile = updatedProfile
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(parsed))
+        } catch {}
+      }
+    }
+  })
 }

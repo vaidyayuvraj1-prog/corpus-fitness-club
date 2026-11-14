@@ -1066,12 +1066,12 @@ export default function MembersPage() {
                 <div className="flex justify-between items-center pb-2 border-b border-gray-200">
                   <span className="text-gray-500 font-semibold uppercase text-[10px]">Assigned Password</span>
                   <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                    {registeredCredentials.password}
+                    {registeredCredentials.password || 'CFC@2026'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center pt-1 text-[11px]">
-                  <span className="text-gray-500">Member Portal</span>
-                  <span className="text-blue-600 font-semibold">http://localhost:5173/auth/login</span>
+                  <span className="text-gray-500">Default Password</span>
+                  <span className="text-emerald-700 font-bold font-mono">CFC@2026</span>
                 </div>
               </div>
 
@@ -1079,7 +1079,8 @@ export default function MembersPage() {
               <div className="space-y-2">
                 <button
                   onClick={() => {
-                    const text = `*CORPUS FITNESS CLUB (CFC) - Member Portal Access*\n\nHello ${registeredCredentials.name},\nWelcome to Corpus Fitness Club, Amravati!\n\nYour Member ID: *${registeredCredentials.member_id}*\nLogin Email: *${registeredCredentials.email}*\nLogin Password: *${registeredCredentials.password}*\n\nLogin to your member dashboard here:\nhttp://localhost:5173/auth/login\n\nFor any help, contact front desk: +91 76206 83995.`
+                    const pass = registeredCredentials.password || 'CFC@2026'
+                    const text = `*CORPUS FITNESS CLUB (CFC) - Member Portal Access*\n\nHello ${registeredCredentials.name},\nWelcome to Corpus Fitness Club, Amravati!\n\nYour Member ID: *${registeredCredentials.member_id}*\nLogin Email: *${registeredCredentials.email}*\nLogin Password: *${pass}* (Default: CFC@2026)\n\nFor any help, contact front desk: +91 76206 83995.`
                     const cleanPhone = registeredCredentials.phone.replace(/[^0-9]/g, '')
                     window.open(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank')
                   }}
@@ -1090,7 +1091,8 @@ export default function MembersPage() {
 
                 <button
                   onClick={() => {
-                    const text = `CORPUS FITNESS CLUB (CFC)\nMember: ${registeredCredentials.name}\nMember ID: ${registeredCredentials.member_id}\nEmail: ${registeredCredentials.email}\nPassword: ${registeredCredentials.password}\nLogin URL: http://localhost:5173/auth/login`
+                    const pass = registeredCredentials.password || 'CFC@2026'
+                    const text = `CORPUS FITNESS CLUB (CFC)\nMember: ${registeredCredentials.name}\nMember ID: ${registeredCredentials.member_id}\nEmail: ${registeredCredentials.email}\nPassword: ${pass} (Default: CFC@2026)`
                     navigator.clipboard.writeText(text)
                     toast.success('Credentials copied to clipboard!')
                   }}
@@ -1233,7 +1235,8 @@ export default function MembersPage() {
               <div className="space-y-2">
                 <button
                   onClick={() => {
-                    const text = `*CORPUS FITNESS CLUB (CFC) - Official Portal Credentials*\n\nHello ${credentialsModalMember.profile?.full_name},\nHere are your gym login details:\n\n• Member ID: *${credentialsModalMember.member_id}*\n• Official Email: *${credentialsModalMember.email || credentialsModalMember.profile?.email}*\n• Password: *${credentialsModalMember.password || 'CFC@2026'}*\n\nSign in here: http://localhost:5173/auth/login\n\nFor assistance, contact front desk: +91 76206 83995.`
+                    const pass = credentialsModalMember.password || 'CFC@2026'
+                    const text = `*CORPUS FITNESS CLUB (CFC) - Official Portal Credentials*\n\nHello ${credentialsModalMember.profile?.full_name},\nHere are your gym login details:\n\n• Member ID: *${credentialsModalMember.member_id}*\n• Official Email: *${credentialsModalMember.email || credentialsModalMember.profile?.email}*\n• Password: *${pass}* (Default: CFC@2026)\n\nFor assistance, contact front desk: +91 76206 83995.`
                     const cleanPhone = (credentialsModalMember.profile?.phone || credentialsModalMember.emergency_phone || '').replace(/[^0-9]/g, '')
                     window.open(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank')
                   }}
@@ -1244,7 +1247,8 @@ export default function MembersPage() {
 
                 <button
                   onClick={() => {
-                    const text = `CORPUS FITNESS CLUB (CFC)\nMember: ${credentialsModalMember.profile?.full_name}\nMember ID: ${credentialsModalMember.member_id}\nEmail: ${credentialsModalMember.email || credentialsModalMember.profile?.email}\nPassword: ${credentialsModalMember.password || 'CFC@2026'}\nLogin URL: http://localhost:5173/auth/login`
+                    const pass = credentialsModalMember.password || 'CFC@2026'
+                    const text = `CORPUS FITNESS CLUB (CFC)\nMember: ${credentialsModalMember.profile?.full_name}\nMember ID: ${credentialsModalMember.member_id}\nEmail: ${credentialsModalMember.email || credentialsModalMember.profile?.email}\nPassword: ${pass} (Default: CFC@2026)`
                     navigator.clipboard.writeText(text)
                     toast.success('Credentials copied to clipboard!')
                   }}

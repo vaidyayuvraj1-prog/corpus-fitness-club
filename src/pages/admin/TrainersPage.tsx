@@ -1179,7 +1179,8 @@ export default function AdminTrainersPage() {
               <div className="space-y-2">
                 <button
                   onClick={() => {
-                    const text = `🏋️ CORPUS FITNESS CLUB (CFC) — Coach Portal Login\n\nHello Coach ${registeredCredentials.name},\nYour trainer account has been activated:\n\n🌐 Portal URL: http://localhost:5173/auth/login\n📧 Login Email: ${registeredCredentials.email}\n🔑 Password: ${registeredCredentials.password}\n\nPlease log in to access your assigned member roster and workout plans.`
+                    const pass = registeredCredentials.password || 'CFC@TRN2026'
+                    const text = `🏋️ CORPUS FITNESS CLUB (CFC) — Coach Portal Login\n\nHello Coach ${registeredCredentials.name},\nYour trainer account has been activated:\n\n📧 Login Email: ${registeredCredentials.email}\n🔑 Password: ${pass} (Default: CFC@TRN2026)\n\nPlease log in to access your assigned member roster and workout plans.\nFront Desk: +91 76206 83995.`
                     navigator.clipboard.writeText(text)
                     toast.success('Trainer credentials copied to clipboard!')
                   }}
@@ -1190,8 +1191,9 @@ export default function AdminTrainersPage() {
 
                 <button
                   onClick={() => {
+                    const pass = registeredCredentials.password || 'CFC@TRN2026'
                     const msg = encodeURIComponent(
-                      `🏋️ CORPUS FITNESS CLUB (CFC) — Coach Portal Login\n\nHello Coach ${registeredCredentials.name},\nYour trainer account has been activated:\n\n🌐 Portal URL: http://localhost:5173/auth/login\n📧 Login Email: ${registeredCredentials.email}\n🔑 Password: ${registeredCredentials.password}`
+                      `🏋️ CORPUS FITNESS CLUB (CFC) — Coach Portal Login\n\nHello Coach ${registeredCredentials.name},\nYour trainer account has been activated:\n\n📧 Login Email: ${registeredCredentials.email}\n🔑 Password: ${pass} (Default: CFC@TRN2026)\n\nPlease log in to access your assigned member roster and workout plans.\nFront Desk: +91 76206 83995.`
                     )
                     const phoneClean = registeredCredentials.phone.replace(/[^0-9]/g, '')
                     window.open(`https://wa.me/${phoneClean}?text=${msg}`, '_blank')

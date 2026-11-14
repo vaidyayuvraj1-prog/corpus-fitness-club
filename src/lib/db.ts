@@ -136,22 +136,31 @@ export async function syncDatabaseWithServer(): Promise<void> {
                   localMembers = []
                 }
 
-                const memberMap = new Map<string, any>()
+                const memberById = new Map<string, any>()
                 row.data.forEach((m: any) => {
-                  if (m?.id) memberMap.set(m.id, m)
-                  if (m?.email) memberMap.set(m.email.toLowerCase(), m)
+                  if (!m) return
+                  const photo = m.photo_url || m.profile?.avatar_url || null
+                  if (photo) {
+                    m.photo_url = photo
+                    if (m.profile) m.profile.avatar_url = photo
+                  }
+                  const key = m.id || m.member_id || (m.email || '').toLowerCase()
+                  if (key) memberById.set(key, m)
                 })
 
                 let addedLocal = false
                 localMembers.forEach((m: any) => {
+                  if (!m) return
+                  const key = m.id || m.member_id || (m.email || '').toLowerCase()
                   const mEmail = (m.email || m.profile?.email || '').toLowerCase()
-                  if (!memberMap.has(m.id) && (!mEmail || !memberMap.has(mEmail))) {
-                    memberMap.set(m.id, m)
+                  const existing = memberById.get(key) || (mEmail ? Array.from(memberById.values()).find((x: any) => (x.email || x.profile?.email || '').toLowerCase() === mEmail) : null)
+                  if (!existing) {
+                    memberById.set(key, m)
                     addedLocal = true
                   }
                 })
 
-                const mergedList = Array.from(new Set(memberMap.values()))
+                const mergedList = Array.from(memberById.values())
                 const mergedStr = JSON.stringify(mergedList)
                 if (mergedStr !== localValStr) {
                   localStorage.setItem(row.key, mergedStr)
@@ -2737,7 +2746,29 @@ seedDatabase()
 export const db = {
   // Members
   getMembers(): Member[] {
-    return getItem<Member[]>(KEYS.MEMBERS, [])
+    const list = getItem<Member[]>(KEYS.MEMBERS, [])
+    return list.map((m) => {
+      const photo = m.photo_url || m.profile?.avatar_url || null
+      if (photo && (!m.photo_url || !m.profile?.avatar_url)) {
+        return {
+          ...m,
+          photo_url: photo,
+          profile: m.profile
+            ? { ...m.profile, avatar_url: photo }
+            : {
+                id: m.profile_id || `prof-${m.id}`,
+                role: 'member' as const,
+                full_name: (m as any).full_name || 'Member',
+                email: m.email || `${m.member_id.toLowerCase()}@corpuss.com`,
+                phone: m.phone || '+91 76206 83995',
+                avatar_url: photo,
+                created_at: m.created_at || new Date().toISOString(),
+                updated_at: m.updated_at || new Date().toISOString(),
+              },
+        }
+      }
+      return m
+    })
   },
   getMemberById(id: string): Member | undefined {
     return this.getMembers().find((m) => m.id === id || m.member_id === id)
@@ -2781,21 +2812,26 @@ export const db = {
       }
     }
 
+    const photoToSave = member.photo_url || member.profile?.avatar_url
+
     if (isEdit) {
       const idx = members.findIndex((m) => m.id === member.id)
       if (idx !== -1) {
         const existing = members[idx]
+        const updatedPhoto = photoToSave || existing.photo_url || existing.profile?.avatar_url || null
         const updated: Member = {
           ...existing,
           ...member,
           email: targetEmail,
+          photo_url: updatedPhoto,
           password: member.password ?? existing.password ?? 'CFC@2026',
           updated_at: new Date().toISOString(),
           profile: {
             ...existing.profile!,
-            full_name: member.full_name ?? existing.profile?.full_name ?? '',
+            full_name: member.full_name ?? existing.profile?.full_name ?? fullName,
             phone: member.phone ?? existing.profile?.phone ?? '',
             email: targetEmail,
+            avatar_url: updatedPhoto,
             updated_at: new Date().toISOString(),
           },
         }
@@ -2825,7 +2861,7 @@ export const db = {
       trainer_name: member.trainer_name || null,
       pt_status: member.pt_status || (member.trainer_id ? 'active_pt' : 'general_floor'),
       pt_package: member.pt_package || null,
-      photo_url: member.photo_url || null,
+      photo_url: photoToSave || null,
       email: targetEmail,
       password: assignedPassword,
       notes: member.notes || null,
@@ -2837,7 +2873,7 @@ export const db = {
         phone: member.phone || '+91 76206 83995',
         email: targetEmail,
         role: 'member',
-        avatar_url: member.photo_url || null,
+        avatar_url: photoToSave || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },

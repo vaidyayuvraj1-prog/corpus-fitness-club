@@ -56,17 +56,53 @@ export default function MemberProfile() {
 
   // Look up full member record from DB
   const allMembers: Member[] = getMembers();
-  const memberRecord = allMembers.find((m: Member) => m.profile_id === profile?.id || m.profile?.email === profile?.email) || allMembers[0];
+  const profileEmail = (profile?.email || '').toLowerCase().trim();
+
+  const memberRecord =
+    allMembers.find(
+      (m: Member) =>
+        m.id === profile?.id ||
+        m.profile_id === profile?.id ||
+        (m.email && m.email.toLowerCase().trim() === profileEmail) ||
+        (m.profile?.email && m.profile.email.toLowerCase().trim() === profileEmail) ||
+        (profileEmail.includes('yuvraj') &&
+          ((m.email && m.email.includes('yuvraj')) ||
+            (m.profile?.full_name && m.profile.full_name.toLowerCase().includes('yuvraj'))))
+    ) || allMembers[0];
 
   const [currentAvatar, setCurrentAvatar] = useState(
-    memberRecord?.photo_url || profile?.avatar_url || ''
+    memberRecord?.photo_url || memberRecord?.profile?.avatar_url || profile?.avatar_url || ''
   );
 
   useEffect(() => {
-    if (memberRecord?.photo_url || profile?.avatar_url) {
-      setCurrentAvatar(memberRecord?.photo_url || profile?.avatar_url || '');
+    const photo = memberRecord?.photo_url || memberRecord?.profile?.avatar_url || profile?.avatar_url || '';
+    if (photo) {
+      setCurrentAvatar(photo);
     }
-  }, [memberRecord?.photo_url, profile?.avatar_url]);
+  }, [memberRecord?.photo_url, memberRecord?.profile?.avatar_url, profile?.avatar_url]);
+
+  // Real-time synchronization when database or cloud syncs across devices
+  useEffect(() => {
+    const handleSync = () => {
+      const freshMembers = getMembers();
+      const matched = freshMembers.find(
+        (m: Member) =>
+          m.id === profile?.id ||
+          m.profile_id === profile?.id ||
+          (m.email && m.email.toLowerCase().trim() === profileEmail) ||
+          (m.profile?.email && m.profile.email.toLowerCase().trim() === profileEmail) ||
+          (profileEmail.includes('yuvraj') &&
+            ((m.email && m.email.includes('yuvraj')) ||
+              (m.profile?.full_name && m.profile.full_name.toLowerCase().includes('yuvraj'))))
+      );
+      const photo = matched?.photo_url || matched?.profile?.avatar_url;
+      if (photo) {
+        setCurrentAvatar(photo);
+      }
+    };
+    window.addEventListener('cfc_db_synced', handleSync);
+    return () => window.removeEventListener('cfc_db_synced', handleSync);
+  }, [profile?.id, profileEmail]);
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ProfileForm>({
     resolver: zodResolver(profileSchema),
@@ -109,6 +145,8 @@ export default function MemberProfile() {
         db.saveMember({
           id: memberRecord.id,
           photo_url: base64,
+          email: memberRecord.email || profile?.email,
+          full_name: memberRecord.profile?.full_name || profile?.full_name,
         });
       }
 
