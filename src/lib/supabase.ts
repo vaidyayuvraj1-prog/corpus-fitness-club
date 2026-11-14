@@ -1,13 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key'
+export const SUPABASE_PROJECT_URL =
+  import.meta.env.VITE_SUPABASE_URL ||
+  import.meta.env.NEXT_PUBLIC_SUPABASE_URL ||
+  'https://lqhqbyetwupgpkghhtlk.supabase.co'
 
-export const isSupabaseConfigured = Boolean(
-  import.meta.env.VITE_SUPABASE_URL &&
-  import.meta.env.VITE_SUPABASE_ANON_KEY &&
-  !import.meta.env.VITE_SUPABASE_URL.includes('placeholder') &&
-  !import.meta.env.VITE_SUPABASE_URL.includes('your-project')
-)
+export const SUPABASE_ANON_KEY =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  'sb_publishable_A6xuLDN6PlcAo-jWSewatQ_BNgp0-Sd'
 
-export const supabase = createClient<any>(supabaseUrl, supabaseAnonKey)
+export const isSupabaseConfigured = true
+
+export const supabase = createClient<any>(SUPABASE_PROJECT_URL, SUPABASE_ANON_KEY)

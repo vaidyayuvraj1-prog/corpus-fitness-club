@@ -112,8 +112,10 @@ export async function syncDatabaseWithServer(): Promise<void> {
         const { data, error } = await supabase.from('cfc_store').select('*')
         if (!error && data && data.length > 0) {
           let hasNewer = false
+          const fetchedKeys = new Set<string>()
           data.forEach((row: any) => {
             if (row && row.key) {
+              fetchedKeys.add(row.key)
               const serverValStr = JSON.stringify(row.data)
               const localValStr = localStorage.getItem(row.key)
               if (serverValStr !== localValStr) {
@@ -122,6 +124,27 @@ export async function syncDatabaseWithServer(): Promise<void> {
               }
             }
           })
+
+          // Push any local keys that are not yet in Supabase
+          const missingKeys = Object.values(KEYS).filter((k) => !fetchedKeys.has(k))
+          if (missingKeys.length > 0) {
+            const rowsToPush: { key: string; data: any; updated_at: string }[] = []
+            missingKeys.forEach((k) => {
+              const raw = localStorage.getItem(k)
+              if (raw) {
+                try {
+                  rowsToPush.push({ key: k, data: JSON.parse(raw), updated_at: new Date().toISOString() })
+                } catch {
+                  rowsToPush.push({ key: k, data: raw, updated_at: new Date().toISOString() })
+                }
+              }
+            })
+
+            if (rowsToPush.length > 0) {
+              await supabase.from('cfc_store').upsert(rowsToPush)
+            }
+          }
+
           if (hasNewer) {
             window.dispatchEvent(new CustomEvent('cfc_db_synced'))
           }
