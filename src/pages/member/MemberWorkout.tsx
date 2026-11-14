@@ -97,6 +97,9 @@ export default function MemberWorkout() {
 
   useEffect(() => {
     loadData()
+    const handleSync = () => loadData()
+    window.addEventListener('cfc_db_synced', handleSync)
+    return () => window.removeEventListener('cfc_db_synced', handleSync)
   }, [profile])
 
   // Timer tick effect

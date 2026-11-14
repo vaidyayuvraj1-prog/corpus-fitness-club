@@ -85,6 +85,9 @@ export default function MembersPage() {
 
   useEffect(() => {
     loadData()
+    const handleSync = () => loadData()
+    window.addEventListener('cfc_db_synced', handleSync)
+    return () => window.removeEventListener('cfc_db_synced', handleSync)
   }, [])
 
   function loadData() {

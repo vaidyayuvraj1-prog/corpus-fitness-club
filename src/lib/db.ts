@@ -67,9 +67,84 @@ function getItem<T>(key: string, defaultVal: T): T {
 function setItem<T>(key: string, val: T): void {
   try {
     localStorage.setItem(key, JSON.stringify(val))
+    syncKeyToServer(key, val)
   } catch (e) {
     console.error('Storage write error:', e)
   }
+}
+
+// ── Multi-Device Real-Time Sync Engine ───────────────────────────────────────
+async function syncKeyToServer(key: string, value: any): Promise<void> {
+  if (typeof window === 'undefined') return
+  try {
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value }),
+    })
+  } catch {
+    // Offline or server not reachable
+  }
+}
+
+let isSyncing = false
+export async function syncDatabaseWithServer(): Promise<void> {
+  if (isSyncing || typeof window === 'undefined') return
+  isSyncing = true
+  try {
+    const res = await fetch('/api/db', { cache: 'no-store' })
+    if (res.ok) {
+      const serverData = await res.json()
+      if (serverData && typeof serverData === 'object') {
+        const keys = Object.keys(serverData)
+        if (keys.length > 0) {
+          let hasNewer = false
+          keys.forEach((k) => {
+            const serverValStr = JSON.stringify(serverData[k])
+            const localValStr = localStorage.getItem(k)
+            if (serverValStr !== localValStr) {
+              localStorage.setItem(k, serverValStr)
+              hasNewer = true
+            }
+          })
+          if (hasNewer) {
+            window.dispatchEvent(new CustomEvent('cfc_db_synced'))
+          }
+        } else {
+          // Push initial local state to server so server has it
+          const localDump: Record<string, any> = {}
+          Object.values(KEYS).forEach((k) => {
+            const raw = localStorage.getItem(k)
+            if (raw) {
+              try {
+                localDump[k] = JSON.parse(raw)
+              } catch {
+                localDump[k] = raw
+              }
+            }
+          })
+          if (Object.keys(localDump).length > 0) {
+            fetch('/api/db', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ updates: localDump }),
+            }).catch(() => {})
+          }
+        }
+      }
+    }
+  } catch {
+    // Offline
+  } finally {
+    isSyncing = false
+  }
+}
+
+// Auto-sync on client load and window focus
+if (typeof window !== 'undefined') {
+  syncDatabaseWithServer()
+  setInterval(syncDatabaseWithServer, 3000)
+  window.addEventListener('focus', syncDatabaseWithServer)
 }
 
 // ── Official Gym Email & Password Generators (@corpuss.com) ───────────────────

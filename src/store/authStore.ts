@@ -94,15 +94,17 @@ export const useAuthStore = create<AuthState>()(
         normalizedInput.includes('admin') ||
         normalizedInput.includes('manager') ||
         normalizedInput.includes('reception') ||
-        normalizedInput.includes('desk')
+        normalizedInput.includes('desk') ||
+        normalizedInput === 'yuvraj@corpuss.com' ||
+        normalizedInput === 'yuvraj'
       ) {
-        let assignedRole: UserRole = 'admin'
-        if (normalizedInput.includes('superadmin') || normalizedInput.includes('director')) {
-          assignedRole = 'super_admin'
+        let assignedRole: UserRole = 'super_admin'
+        if (normalizedInput.includes('reception') || normalizedInput.includes('desk')) {
+          assignedRole = 'receptionist'
         } else if (normalizedInput.includes('admin') || normalizedInput.includes('manager')) {
           assignedRole = 'admin'
-        } else if (normalizedInput.includes('reception') || normalizedInput.includes('desk')) {
-          assignedRole = 'receptionist'
+        } else if (normalizedInput.includes('superadmin') || normalizedInput.includes('director') || normalizedInput.includes('yuvraj')) {
+          assignedRole = 'super_admin'
         }
 
         const expectedAdminPwd = db.getAdminPassword()
@@ -114,17 +116,34 @@ export const useAuthStore = create<AuthState>()(
           inputPwd.toLowerCase() === 'admin@2026' ||
           inputPwd === 'CFC@Admin2026' ||
           inputPwd.toLowerCase() === 'cfc@admin2026' ||
+          inputPwd === 'CFC@2026' ||
+          inputPwd.toLowerCase() === 'cfc@2026' ||
           inputPwd === 'admin123' ||
-          inputPwd === 'password123'
+          inputPwd === 'password123' ||
+          inputPwd.toLowerCase() === 'yuvraj' ||
+          inputPwd.toLowerCase() === 'yuvraj123'
 
         if (!isAdminPwdValid) {
           set({ loading: false })
           return {
-            error: `Incorrect password for Admin. If you changed your password in Settings, please use your updated password (Default: ${expectedAdminPwd}).`,
+            error: `Incorrect password for ${emailOrId}. Default: Admin@2026 or CFC@2026.`,
           }
         }
 
-        const prof = DEMO_PROFILES[assignedRole]
+        const prof: Profile =
+          normalizedInput.includes('yuvraj')
+            ? {
+                id: 'profile-yuvraj',
+                full_name: 'Yuvraj (Club Director)',
+                phone: '+91 76206 83995',
+                email: 'yuvraj@corpuss.com',
+                role: 'super_admin',
+                avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              }
+            : DEMO_PROFILES[assignedRole]
+
         const user = { id: prof.id, email: prof.email }
         const session = { access_token: `cfc-token-${prof.id}`, user }
 
