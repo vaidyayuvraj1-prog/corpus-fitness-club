@@ -74,6 +74,15 @@ function setItem<T>(key: string, val: T): void {
   }
 }
 
+// Local-only cache seeding: Populates localStorage without overwriting Supabase cloud data
+function setLocalSeed<T>(key: string, val: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(val))
+  } catch (e) {
+    console.error('Seed write error:', e)
+  }
+}
+
 // ── Multi-Device Real-Time Sync Engine ───────────────────────────────────────
 async function syncKeyToServer(key: string, value: any): Promise<void> {
   if (typeof window === 'undefined') return
@@ -116,11 +125,51 @@ export async function syncDatabaseWithServer(): Promise<void> {
           data.forEach((row: any) => {
             if (row && row.key) {
               fetchedKeys.add(row.key)
-              const serverValStr = JSON.stringify(row.data)
               const localValStr = localStorage.getItem(row.key)
-              if (serverValStr !== localValStr) {
-                localStorage.setItem(row.key, serverValStr)
-                hasNewer = true
+
+              // Smart merge for members: NEVER drop a member created on another device
+              if (row.key === KEYS.MEMBERS && Array.isArray(row.data)) {
+                let localMembers: any[] = []
+                try {
+                  localMembers = localValStr ? JSON.parse(localValStr) : []
+                } catch {
+                  localMembers = []
+                }
+
+                const memberMap = new Map<string, any>()
+                row.data.forEach((m: any) => {
+                  if (m?.id) memberMap.set(m.id, m)
+                  if (m?.email) memberMap.set(m.email.toLowerCase(), m)
+                })
+
+                let addedLocal = false
+                localMembers.forEach((m: any) => {
+                  const mEmail = (m.email || m.profile?.email || '').toLowerCase()
+                  if (!memberMap.has(m.id) && (!mEmail || !memberMap.has(mEmail))) {
+                    memberMap.set(m.id, m)
+                    addedLocal = true
+                  }
+                })
+
+                const mergedList = Array.from(new Set(memberMap.values()))
+                const mergedStr = JSON.stringify(mergedList)
+                if (mergedStr !== localValStr) {
+                  localStorage.setItem(row.key, mergedStr)
+                  hasNewer = true
+                }
+                if (addedLocal) {
+                  supabase.from('cfc_store').upsert({
+                    key: KEYS.MEMBERS,
+                    data: mergedList,
+                    updated_at: new Date().toISOString(),
+                  })
+                }
+              } else {
+                const serverValStr = JSON.stringify(row.data)
+                if (serverValStr !== localValStr) {
+                  localStorage.setItem(row.key, serverValStr)
+                  hasNewer = true
+                }
               }
             }
           })
@@ -1646,12 +1695,12 @@ function seedDatabase() {
       is_active: true,
       created_at: new Date().toISOString(),
     }))
-    setItem(KEYS.PLANS, initialPlans)
+    setLocalSeed(KEYS.PLANS, initialPlans)
   }
 
   // 1b. Gallery Items (Gym Interior, Equipment, Training)
   if (!localStorage.getItem(KEYS.GALLERY)) {
-    setItem(KEYS.GALLERY, GALLERY_ITEMS_DEFAULT)
+    setLocalSeed(KEYS.GALLERY, GALLERY_ITEMS_DEFAULT)
   }
 
   // 2. Trainers
@@ -1682,7 +1731,7 @@ function seedDatabase() {
         updated_at: new Date().toISOString(),
       },
     }))
-    setItem(KEYS.TRAINERS, initialTrainers)
+    setLocalSeed(KEYS.TRAINERS, initialTrainers)
   }
 
   // 3. Members
@@ -1950,8 +1999,60 @@ function seedDatabase() {
           },
         },
       },
+      {
+        id: 'mem-6',
+        profile_id: 'prof-6',
+        member_id: 'CFC-2026-0006',
+        gender: 'male',
+        date_of_birth: '1998-01-01',
+        address: 'Harshraj Colony, VMV Road, Amravati, Maharashtra 444604',
+        emergency_contact: 'Family Contact',
+        emergency_phone: '+91 76206 83995',
+        registration_date: '2026-01-15',
+        fitness_goal: 'Strength & Conditioning',
+        status: 'active',
+        current_plan_id: 'ms-6',
+        photo_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+        email: 'yuvraj.vaidya@corpuss.com',
+        password: 'CFC@2026',
+        created_at: '2026-01-15T10:00:00Z',
+        updated_at: '2026-01-15T10:00:00Z',
+        profile: {
+          id: 'prof-6',
+          full_name: 'Yuvraj Vaidya',
+          phone: '+91 76206 83995',
+          email: 'yuvraj.vaidya@corpuss.com',
+          role: 'member',
+          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+          created_at: '2026-01-15T10:00:00Z',
+          updated_at: '2026-01-15T10:00:00Z',
+        },
+        current_plan: {
+          id: 'ms-6',
+          member_id: 'mem-6',
+          plan_id: 'annual',
+          start_date: '2026-01-15',
+          end_date: '2027-01-15',
+          amount_paid: 5000,
+          payment_method: 'UPI',
+          status: 'active',
+          created_at: '2026-01-15T10:00:00Z',
+          plan: {
+            id: 'annual',
+            name: 'Yearly Plan',
+            duration_type: '12 Months',
+            duration_months: 12,
+            price_men: 5000,
+            price_women: 4000,
+            price: 5000,
+            description: '365 days unlimited gym access',
+            is_active: true,
+            created_at: '2025-01-01',
+          },
+        },
+      },
     ]
-    setItem(KEYS.MEMBERS, initialMembers)
+    setLocalSeed(KEYS.MEMBERS, initialMembers)
   }
 
   // 4. Payments
@@ -2022,7 +2123,7 @@ function seedDatabase() {
         created_at: subDays(today, 5).toISOString(),
       },
     ]
-    setItem(KEYS.PAYMENTS, initialPayments)
+    setLocalSeed(KEYS.PAYMENTS, initialPayments)
   }
 
   // 5. Attendance
@@ -2061,7 +2162,7 @@ function seedDatabase() {
         recorded_by: 'Scanner Machine 1',
       },
     ]
-    setItem(KEYS.ATTENDANCE, initialAttendance)
+    setLocalSeed(KEYS.ATTENDANCE, initialAttendance)
   }
 
   // 6. Enquiries CRM
@@ -2122,7 +2223,7 @@ function seedDatabase() {
         created_at: subDays(today, 3).toISOString(),
       },
     ]
-    setItem(KEYS.ENQUIRIES, initialEnquiries)
+    setLocalSeed(KEYS.ENQUIRIES, initialEnquiries)
   }
 
   // 7. Expenses
@@ -2179,7 +2280,7 @@ function seedDatabase() {
         created_at: new Date().toISOString(),
       },
     ]
-    setItem(KEYS.EXPENSES, initialExpenses)
+    setLocalSeed(KEYS.EXPENSES, initialExpenses)
   }
 
   // 8. Workout Plans
@@ -2304,7 +2405,7 @@ function seedDatabase() {
         ],
       },
     ]
-    setItem(KEYS.WORKOUTS, initialWorkouts)
+    setLocalSeed(KEYS.WORKOUTS, initialWorkouts)
   }
 
   // 9. Diet Plans
@@ -2386,7 +2487,7 @@ function seedDatabase() {
         ],
       },
     ]
-    setItem(KEYS.DIETS, initialDiets)
+    setLocalSeed(KEYS.DIETS, initialDiets)
   }
 
   // 10. Progress
@@ -2426,7 +2527,7 @@ function seedDatabase() {
         notes: 'Met 6-month goal! Increased bench press and visible abs.',
       },
     ]
-    setItem(KEYS.PROGRESS, initialProgress)
+    setLocalSeed(KEYS.PROGRESS, initialProgress)
   }
 
   // 14. Notifications & Club Broadcasts (Admin to Members)
@@ -2485,7 +2586,7 @@ function seedDatabase() {
         created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
       },
     ]
-    setItem(KEYS.NOTIFICATIONS, initialNotifications)
+    setLocalSeed(KEYS.NOTIFICATIONS, initialNotifications)
   }
 
   // 15. Membership Renewal Logs (Record of when customer renewed)
@@ -2532,7 +2633,7 @@ function seedDatabase() {
         created_at: '2026-02-01T11:30:00Z',
       },
     ]
-    setItem(KEYS.RENEWALS, initialRenewals)
+    setLocalSeed(KEYS.RENEWALS, initialRenewals)
   }
 
   // 16. Auto-Migration: Ensure all members & trainers have valid @corpuss.com emails and passwords
