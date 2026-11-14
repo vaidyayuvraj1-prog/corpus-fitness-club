@@ -428,6 +428,22 @@ export default function AdminTrainersPage() {
               </div>
             ))}
           </div>
+
+          {filteredTrainers.length === 0 && (
+            <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-12 text-center">
+              <Dumbbell className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <h4 className="text-base font-bold text-gray-800">No Trainers Registered Yet</h4>
+              <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1 mb-4">
+                Add your gym's certified trainers and coaches to assign them to members and manage PT clients.
+              </p>
+              <button
+                onClick={handleOpenAdd}
+                className="px-4 py-2 bg-[#E50914] text-white text-xs font-bold rounded-xl hover:bg-red-700 transition-colors shadow-xs cursor-pointer"
+              >
+                + Register First Trainer
+              </button>
+            </div>
+          )}
         </div>
       )}
 

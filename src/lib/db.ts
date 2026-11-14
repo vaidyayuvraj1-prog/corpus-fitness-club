@@ -56,6 +56,17 @@ const KEYS = {
   AUDIT_LOGS: 'cfc_db_audit_logs',
 }
 
+// Hardcoded Fake Demo Member Identifiers to Purge
+export const FAKE_MEMBER_IDS = new Set(['mem-1', 'mem-2', 'mem-3', 'mem-4', 'mem-5'])
+export const FAKE_MEMBER_EMAILS = new Set([
+  'rahul.sharma@corpuss.com',
+  'member1@corpuss.com',
+  'priya.deshmukh@corpuss.com',
+  'amit.verma@corpuss.com',
+  'neha.patil@corpuss.com',
+  'vikram.rathore@corpuss.com',
+])
+
 function getItem<T>(key: string, defaultVal: T): T {
   try {
     const val = localStorage.getItem(key)
@@ -127,7 +138,7 @@ export async function syncDatabaseWithServer(): Promise<void> {
               fetchedKeys.add(row.key)
               const localValStr = localStorage.getItem(row.key)
 
-              // Smart merge for members: NEVER drop a member created on another device
+              // Smart merge for members: NEVER revive fake demo members
               if (row.key === KEYS.MEMBERS && Array.isArray(row.data)) {
                 let localMembers: any[] = []
                 try {
@@ -136,9 +147,23 @@ export async function syncDatabaseWithServer(): Promise<void> {
                   localMembers = []
                 }
 
+                // Strip any fake demo members from local cache immediately
+                localMembers = localMembers.filter(
+                  (m) =>
+                    !FAKE_MEMBER_IDS.has(m?.id) &&
+                    !FAKE_MEMBER_EMAILS.has((m?.email || '').toLowerCase()) &&
+                    !FAKE_MEMBER_EMAILS.has((m?.profile?.email || '').toLowerCase())
+                )
+
                 const memberById = new Map<string, any>()
                 row.data.forEach((m: any) => {
-                  if (!m) return
+                  if (
+                    !m ||
+                    FAKE_MEMBER_IDS.has(m?.id) ||
+                    FAKE_MEMBER_EMAILS.has((m?.email || '').toLowerCase()) ||
+                    FAKE_MEMBER_EMAILS.has((m?.profile?.email || '').toLowerCase())
+                  )
+                    return
                   const photo = m.photo_url || m.profile?.avatar_url || null
                   if (photo) {
                     m.photo_url = photo
@@ -296,419 +321,9 @@ export function generateCorpussEmail(fullName: string, role: 'member' | 'trainer
   const baseEmail = `${clean}@corpuss.com`
 
 
-  // 8. Exercise Library Master
-  if (!localStorage.getItem(KEYS.EXERCISE_LIBRARY)) {
-    setItem(KEYS.EXERCISE_LIBRARY, DEFAULT_EXERCISE_LIBRARY)
-  }
 
-  // 9. Workout Plans (Ensure all 7 Core Default Plans exist)
-  const existingWorkouts: WorkoutPlan[] = getItem<WorkoutPlan[]>(KEYS.WORKOUTS, [])
-  if (existingWorkouts.length === 0) {
-    setItem(KEYS.WORKOUTS, CORE_DEFAULT_WORKOUT_PLANS)
-  } else {
-    // Check if any core default plan is missing
-    let updatedWorkouts = [...existingWorkouts]
-    let modified = false
-    CORE_DEFAULT_WORKOUT_PLANS.forEach((defPlan) => {
-      const found = updatedWorkouts.some((w) => w.id === defPlan.id || w.name === defPlan.name)
-      if (!found) {
-        updatedWorkouts.push(defPlan)
-        modified = true
-      }
-    })
-    if (modified) {
-      setItem(KEYS.WORKOUTS, updatedWorkouts)
-    }
-  }
 
-  // 10. Initial Trainer Assignments & History
-  if (!localStorage.getItem(KEYS.ASSIGNMENTS)) {
-    const initialAssignments: TrainerAssignment[] = [
-      {
-        id: 'asg-1',
-        member_id: 'mem-1',
-        member_name: 'Rahul Sharma',
-        member_code: 'CFC-2026-0001',
-        trainer_id: 'tr-1',
-        trainer_name: 'Coach Rohit Deshmukh',
-        assigned_date: '2025-06-10',
-        status: 'active',
-        assigned_by: 'CFC Admin',
-        notes: 'Primary 1-on-1 Transformation Package: Strength and Hypertrophy',
-        previous_trainer_name: 'Coach Amol Sawant',
-        pt_package: '1-on-1 Personal Transformation',
-        created_at: '2025-06-10T09:30:00Z',
-      },
-      {
-        id: 'asg-2',
-        member_id: 'mem-2',
-        member_name: 'Priya Deshmukh',
-        member_code: 'CFC-2026-0002',
-        trainer_id: 'tr-2',
-        trainer_name: 'Priya Bhagat',
-        assigned_date: '2025-08-15',
-        status: 'active',
-        assigned_by: 'CFC Admin',
-        notes: 'Women Transformation & Aerobics / Zumba Conditioning',
-        previous_trainer_name: null,
-        pt_package: 'Fat Loss & Conditioning',
-        created_at: '2025-08-15T08:00:00Z',
-      },
-      {
-        id: 'asg-3',
-        member_id: 'mem-5',
-        member_name: 'Kunal Joshi',
-        member_code: 'CFC-2026-0005',
-        trainer_id: 'tr-3',
-        trainer_name: 'Amol Sawant',
-        assigned_date: '2025-11-01',
-        status: 'active',
-        assigned_by: 'CFC Admin',
-        notes: 'Powerlifting Competition Prep',
-        previous_trainer_name: null,
-        pt_package: 'Powerlifting Protocol',
-        created_at: '2025-11-01T10:00:00Z',
-      },
-      {
-        id: 'asg-hist-1',
-        member_id: 'mem-1',
-        member_name: 'Rahul Sharma',
-        member_code: 'CFC-2026-0001',
-        trainer_id: 'tr-3',
-        trainer_name: 'Coach Amol Sawant',
-        assigned_date: '2025-01-15',
-        status: 'changed',
-        assigned_by: 'CFC Admin',
-        notes: 'Initial strength screening phase; reassigned to Coach Rohit on 10 Jun 2025',
-        previous_trainer_name: null,
-        pt_package: 'General Strength',
-        created_at: '2025-01-15T09:00:00Z',
-      },
-    ]
-    setItem(KEYS.ASSIGNMENTS, initialAssignments)
-  }
 
-  // 11. Initial Workout Sessions for Demo Members (November & October 2026)
-  if (!localStorage.getItem(KEYS.WORKOUT_SESSIONS)) {
-    const initialSessions: WorkoutSession[] = [
-      // Rahul Sharma (mem-1 - With Trainer) - November 2026
-      {
-        id: 'ws-rs-11-1',
-        member_id: 'mem-1',
-        member_name: 'Rahul Sharma',
-        plan_id: 'wp-default-musclebuilding',
-        plan_name: 'Muscle Building & Hypertrophy Split',
-        date: '2026-11-02',
-        start_time: '06:30 AM',
-        end_time: '07:25 AM',
-        duration_minutes: 55,
-        trainer_name: 'Coach Rohit Deshmukh',
-        notes: 'Chest & Delts workout. Bench press moved very smoothly.',
-        completed_sets: [
-          { id: 's-1', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 1, reps: 10, weight_kg: 65, completed: true },
-          { id: 's-2', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 2, reps: 10, weight_kg: 70, completed: true },
-          { id: 's-3', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 3, reps: 8, weight_kg: 75, completed: true },
-          { id: 's-4', exercise_name: 'Incline Dumbbell Press', muscle_group: 'Chest', set_number: 1, reps: 12, weight_kg: 22, completed: true },
-          { id: 's-5', exercise_name: 'Incline Dumbbell Press', muscle_group: 'Chest', set_number: 2, reps: 10, weight_kg: 24, completed: true },
-        ],
-        created_at: '2026-11-02T07:30:00Z',
-      },
-      {
-        id: 'ws-rs-11-2',
-        member_id: 'mem-1',
-        member_name: 'Rahul Sharma',
-        plan_id: 'wp-default-musclebuilding',
-        plan_name: 'Muscle Building & Hypertrophy Split',
-        date: '2026-11-04',
-        start_time: '06:40 AM',
-        end_time: '07:35 AM',
-        duration_minutes: 55,
-        trainer_name: 'Coach Rohit Deshmukh',
-        notes: 'Back & Biceps volume session. Lat stretch achieved.',
-        completed_sets: [
-          { id: 's-6', exercise_name: 'Barbell Bent-Over Row', muscle_group: 'Back', set_number: 1, reps: 10, weight_kg: 65, completed: true },
-          { id: 's-7', exercise_name: 'Barbell Bent-Over Row', muscle_group: 'Back', set_number: 2, reps: 10, weight_kg: 70, completed: true },
-          { id: 's-8', exercise_name: 'Barbell Bent-Over Row', muscle_group: 'Back', set_number: 3, reps: 8, weight_kg: 75, completed: true },
-          { id: 's-9', exercise_name: 'Wide-Grip Lat Pulldown', muscle_group: 'Back', set_number: 1, reps: 12, weight_kg: 55, completed: true },
-          { id: 's-10', exercise_name: 'Wide-Grip Lat Pulldown', muscle_group: 'Back', set_number: 2, reps: 10, weight_kg: 60, completed: true },
-          { id: 's-11', exercise_name: 'Standing Barbell Bicep Curl', muscle_group: 'Arms', set_number: 1, reps: 12, weight_kg: 30, completed: true },
-          { id: 's-12', exercise_name: 'Standing Barbell Bicep Curl', muscle_group: 'Arms', set_number: 2, reps: 10, weight_kg: 32.5, completed: true },
-        ],
-        created_at: '2026-11-04T07:40:00Z',
-      },
-      {
-        id: 'ws-rs-11-3',
-        member_id: 'mem-1',
-        member_name: 'Rahul Sharma',
-        plan_id: 'wp-default-musclebuilding',
-        plan_name: 'Muscle Building & Hypertrophy Split',
-        date: '2026-11-06',
-        start_time: '06:30 AM',
-        end_time: '07:30 AM',
-        duration_minutes: 60,
-        trainer_name: 'Coach Rohit Deshmukh',
-        notes: 'Heavy Squat day. Hit parallel cleanly on all working sets.',
-        completed_sets: [
-          { id: 's-13', exercise_name: 'Barbell Back Squat', muscle_group: 'Legs', set_number: 1, reps: 10, weight_kg: 90, completed: true },
-          { id: 's-14', exercise_name: 'Barbell Back Squat', muscle_group: 'Legs', set_number: 2, reps: 8, weight_kg: 100, completed: true },
-          { id: 's-15', exercise_name: 'Barbell Back Squat', muscle_group: 'Legs', set_number: 3, reps: 6, weight_kg: 105, completed: true },
-          { id: 's-16', exercise_name: 'Leg Press 45-Degree', muscle_group: 'Legs', set_number: 1, reps: 12, weight_kg: 160, completed: true },
-          { id: 's-17', exercise_name: 'Leg Press 45-Degree', muscle_group: 'Legs', set_number: 2, reps: 10, weight_kg: 180, completed: true },
-        ],
-        created_at: '2026-11-06T07:35:00Z',
-      },
-      {
-        id: 'ws-rs-11-4',
-        member_id: 'mem-1',
-        member_name: 'Rahul Sharma',
-        plan_id: 'wp-default-musclebuilding',
-        plan_name: 'Muscle Building & Hypertrophy Split',
-        date: '2026-11-09',
-        start_time: '06:30 AM',
-        end_time: '07:25 AM',
-        duration_minutes: 55,
-        trainer_name: 'Coach Rohit Deshmukh',
-        notes: 'Chest & Shoulders progressive session. Barbell press 75kg felt solid.',
-        completed_sets: [
-          { id: 's-18', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 1, reps: 10, weight_kg: 70, completed: true },
-          { id: 's-19', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 2, reps: 8, weight_kg: 75, completed: true },
-          { id: 's-20', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 3, reps: 7, weight_kg: 77.5, completed: true },
-          { id: 's-21', exercise_name: 'Overhead Barbell Military Press', muscle_group: 'Shoulders', set_number: 1, reps: 10, weight_kg: 45, completed: true },
-          { id: 's-22', exercise_name: 'Overhead Barbell Military Press', muscle_group: 'Shoulders', set_number: 2, reps: 8, weight_kg: 50, completed: true },
-        ],
-        created_at: '2026-11-09T07:30:00Z',
-      },
-      {
-        id: 'ws-rs-11-5',
-        member_id: 'mem-1',
-        member_name: 'Rahul Sharma',
-        plan_id: 'wp-default-musclebuilding',
-        plan_name: 'Muscle Building & Hypertrophy Split',
-        date: '2026-11-11',
-        start_time: '06:35 AM',
-        end_time: '07:30 AM',
-        duration_minutes: 55,
-        trainer_name: 'Coach Rohit Deshmukh',
-        notes: 'Deadlift & Upper Back power. Clean neutral spine.',
-        completed_sets: [
-          { id: 's-23', exercise_name: 'Barbell Conventional Deadlift', muscle_group: 'Back', set_number: 1, reps: 5, weight_kg: 120, completed: true },
-          { id: 's-24', exercise_name: 'Barbell Conventional Deadlift', muscle_group: 'Back', set_number: 2, reps: 5, weight_kg: 130, completed: true },
-          { id: 's-25', exercise_name: 'Barbell Conventional Deadlift', muscle_group: 'Back', set_number: 3, reps: 3, weight_kg: 140, completed: true },
-          { id: 's-26', exercise_name: 'Wide-Grip Lat Pulldown', muscle_group: 'Back', set_number: 1, reps: 10, weight_kg: 60, completed: true },
-        ],
-        created_at: '2026-11-11T07:35:00Z',
-      },
-      {
-        id: 'ws-rs-11-6',
-        member_id: 'mem-1',
-        member_name: 'Rahul Sharma',
-        plan_id: 'wp-default-musclebuilding',
-        plan_name: 'Muscle Building & Hypertrophy Split',
-        date: '2026-11-13',
-        start_time: '06:30 AM',
-        end_time: '07:25 AM',
-        duration_minutes: 55,
-        trainer_name: 'Coach Rohit Deshmukh',
-        notes: 'Squats and Hamstrings. Squat up to 110kg for 5 reps (New Personal Record!).',
-        completed_sets: [
-          { id: 's-27', exercise_name: 'Barbell Back Squat', muscle_group: 'Legs', set_number: 1, reps: 8, weight_kg: 95, completed: true },
-          { id: 's-28', exercise_name: 'Barbell Back Squat', muscle_group: 'Legs', set_number: 2, reps: 6, weight_kg: 105, completed: true },
-          { id: 's-29', exercise_name: 'Barbell Back Squat', muscle_group: 'Legs', set_number: 3, reps: 5, weight_kg: 110, completed: true },
-          { id: 's-30', exercise_name: 'Romanian Deadlift (RDL)', muscle_group: 'Legs', set_number: 1, reps: 10, weight_kg: 70, completed: true },
-          { id: 's-31', exercise_name: 'Romanian Deadlift (RDL)', muscle_group: 'Legs', set_number: 2, reps: 10, weight_kg: 80, completed: true },
-        ],
-        created_at: '2026-11-13T07:30:00Z',
-      },
-
-      // Rahul Sharma - October 2026 (Previous Month for real Month-over-Month comparison)
-      {
-        id: 'ws-rs-10-1',
-        member_id: 'mem-1',
-        member_name: 'Rahul Sharma',
-        plan_id: 'wp-default-musclebuilding',
-        plan_name: 'Muscle Building & Hypertrophy Split',
-        date: '2026-10-05',
-        start_time: '06:30 AM',
-        end_time: '07:20 AM',
-        duration_minutes: 50,
-        trainer_name: 'Coach Rohit Deshmukh',
-        completed_sets: [
-          { id: 's-oct-1', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 1, reps: 10, weight_kg: 60, completed: true },
-          { id: 's-oct-2', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 2, reps: 8, weight_kg: 65, completed: true },
-          { id: 's-oct-3', exercise_name: 'Barbell Back Squat', muscle_group: 'Legs', set_number: 1, reps: 8, weight_kg: 80, completed: true },
-          { id: 's-oct-4', exercise_name: 'Barbell Back Squat', muscle_group: 'Legs', set_number: 2, reps: 8, weight_kg: 85, completed: true },
-        ],
-        created_at: '2026-10-05T07:25:00Z',
-      },
-      {
-        id: 'ws-rs-10-2',
-        member_id: 'mem-1',
-        member_name: 'Rahul Sharma',
-        plan_id: 'wp-default-musclebuilding',
-        plan_name: 'Muscle Building & Hypertrophy Split',
-        date: '2026-10-12',
-        start_time: '06:30 AM',
-        end_time: '07:20 AM',
-        duration_minutes: 50,
-        trainer_name: 'Coach Rohit Deshmukh',
-        completed_sets: [
-          { id: 's-oct-5', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 1, reps: 10, weight_kg: 65, completed: true },
-          { id: 's-oct-6', exercise_name: 'Barbell Bent-Over Row', muscle_group: 'Back', set_number: 1, reps: 10, weight_kg: 60, completed: true },
-          { id: 's-oct-7', exercise_name: 'Barbell Back Squat', muscle_group: 'Legs', set_number: 1, reps: 8, weight_kg: 90, completed: true },
-        ],
-        created_at: '2026-10-12T07:25:00Z',
-      },
-
-      // Amit Verma (mem-3 - Without Trainer / Self-Guided) - November 2026
-      {
-        id: 'ws-av-11-1',
-        member_id: 'mem-3',
-        member_name: 'Amit Verma',
-        plan_id: 'wp-default-strength',
-        plan_name: 'Strength Training & 5x5 Power Protocol',
-        date: '2026-11-03',
-        start_time: '07:30 AM',
-        end_time: '08:25 AM',
-        duration_minutes: 55,
-        trainer_name: null,
-        notes: 'Self-guided power session. Bench 5x5 completed.',
-        completed_sets: [
-          { id: 'av-1', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 1, reps: 5, weight_kg: 80, completed: true },
-          { id: 'av-2', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 2, reps: 5, weight_kg: 82.5, completed: true },
-          { id: 'av-3', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 3, reps: 5, weight_kg: 85, completed: true },
-          { id: 'av-4', exercise_name: 'Overhead Barbell Military Press', muscle_group: 'Shoulders', set_number: 1, reps: 5, weight_kg: 45, completed: true },
-          { id: 'av-5', exercise_name: 'Overhead Barbell Military Press', muscle_group: 'Shoulders', set_number: 2, reps: 5, weight_kg: 47.5, completed: true },
-        ],
-        created_at: '2026-11-03T08:30:00Z',
-      },
-      {
-        id: 'ws-av-11-2',
-        member_id: 'mem-3',
-        member_name: 'Amit Verma',
-        plan_id: 'wp-default-strength',
-        plan_name: 'Strength Training & 5x5 Power Protocol',
-        date: '2026-11-06',
-        start_time: '07:30 AM',
-        end_time: '08:25 AM',
-        duration_minutes: 55,
-        trainer_name: null,
-        notes: 'Self-guided Squat & Deadlift session.',
-        completed_sets: [
-          { id: 'av-6', exercise_name: 'Barbell Back Squat', muscle_group: 'Legs', set_number: 1, reps: 5, weight_kg: 100, completed: true },
-          { id: 'av-7', exercise_name: 'Barbell Back Squat', muscle_group: 'Legs', set_number: 2, reps: 5, weight_kg: 105, completed: true },
-          { id: 'av-8', exercise_name: 'Barbell Conventional Deadlift', muscle_group: 'Back', set_number: 1, reps: 5, weight_kg: 125, completed: true },
-          { id: 'av-9', exercise_name: 'Barbell Conventional Deadlift', muscle_group: 'Back', set_number: 2, reps: 5, weight_kg: 135, completed: true },
-        ],
-        created_at: '2026-11-06T08:30:00Z',
-      },
-      {
-        id: 'ws-av-11-3',
-        member_id: 'mem-3',
-        member_name: 'Amit Verma',
-        plan_id: 'wp-default-strength',
-        plan_name: 'Strength Training & 5x5 Power Protocol',
-        date: '2026-11-10',
-        start_time: '07:30 AM',
-        end_time: '08:25 AM',
-        duration_minutes: 55,
-        trainer_name: null,
-        notes: 'Overload session. Deadlift 145kg x 3 reps.',
-        completed_sets: [
-          { id: 'av-10', exercise_name: 'Barbell Flat Bench Press', muscle_group: 'Chest', set_number: 1, reps: 5, weight_kg: 85, completed: true },
-          { id: 'av-11', exercise_name: 'Barbell Conventional Deadlift', muscle_group: 'Back', set_number: 1, reps: 5, weight_kg: 130, completed: true },
-          { id: 'av-12', exercise_name: 'Barbell Conventional Deadlift', muscle_group: 'Back', set_number: 2, reps: 3, weight_kg: 145, completed: true },
-        ],
-        created_at: '2026-11-10T08:30:00Z',
-      },
-
-      // Priya Deshmukh (mem-2 - With Trainer) - November 2026
-      {
-        id: 'ws-pd-11-1',
-        member_id: 'mem-2',
-        member_name: 'Priya Deshmukh',
-        plan_id: 'wp-default-weightloss',
-        plan_name: 'Weight Loss & High Intensity Metabolic Shred',
-        date: '2026-11-02',
-        start_time: '07:05 AM',
-        end_time: '07:55 AM',
-        duration_minutes: 50,
-        trainer_name: 'Priya Bhagat',
-        notes: 'Zumba warm-up + kettlebell conditioning.',
-        completed_sets: [
-          { id: 'pd-1', exercise_name: 'Russian Kettlebell Swings', muscle_group: 'Full Body', set_number: 1, reps: 20, weight_kg: 12, completed: true },
-          { id: 'pd-2', exercise_name: 'Russian Kettlebell Swings', muscle_group: 'Full Body', set_number: 2, reps: 20, weight_kg: 14, completed: true },
-          { id: 'pd-3', exercise_name: 'Walking Dumbbell Lunges', muscle_group: 'Legs', set_number: 1, reps: 15, weight_kg: 8, completed: true },
-          { id: 'pd-4', exercise_name: 'Walking Dumbbell Lunges', muscle_group: 'Legs', set_number: 2, reps: 15, weight_kg: 10, completed: true },
-        ],
-        created_at: '2026-11-02T08:00:00Z',
-      },
-      {
-        id: 'ws-pd-11-2',
-        member_id: 'mem-2',
-        member_name: 'Priya Deshmukh',
-        plan_id: 'wp-default-weightloss',
-        plan_name: 'Weight Loss & High Intensity Metabolic Shred',
-        date: '2026-11-05',
-        start_time: '07:05 AM',
-        end_time: '07:55 AM',
-        duration_minutes: 50,
-        trainer_name: 'Priya Bhagat',
-        completed_sets: [
-          { id: 'pd-5', exercise_name: 'Russian Kettlebell Swings', muscle_group: 'Full Body', set_number: 1, reps: 20, weight_kg: 14, completed: true },
-          { id: 'pd-6', exercise_name: 'Dumbbell Thrusters (Squat to Press)', muscle_group: 'Full Body', set_number: 1, reps: 12, weight_kg: 8, completed: true },
-          { id: 'pd-7', exercise_name: 'High Intensity Burpees', muscle_group: 'Cardio', set_number: 1, reps: 15, weight_kg: 0, completed: true },
-        ],
-        created_at: '2026-11-05T08:00:00Z',
-      },
-    ]
-    setItem(KEYS.WORKOUT_SESSIONS, initialSessions)
-  }
-
-  // 12. Initial Trainer Monthly Feedback (For Members with Trainer)
-  if (!localStorage.getItem(KEYS.TRAINER_FEEDBACK)) {
-    const initialFeedback: TrainerFeedback[] = [
-      {
-        id: 'tf-1',
-        member_id: 'mem-1',
-        trainer_id: 'tr-1',
-        trainer_name: 'Coach Rohit Deshmukh',
-        month: 11, // November
-        year: 2026,
-        rating: 5,
-        feedback: 'Rahul has displayed exceptional dedication this month. His Barbell Bench Press has climbed from 65kg to a strong 77.5kg triple, and Squat depth has reached full competition parallel. Form remains crisp under fatigue.',
-        focus_areas: ['Squat Depth & Hip Drive', 'Daily 160g Protein Goal', 'Post-Workout Mobility & Foam Rolling'],
-        recommendations: 'Continue progressive overload on the 4-day hypertrophy split. In December, introduce deficit Romanian Deadlifts to fortify posterior chain endurance.',
-        created_at: '2026-11-14T10:00:00Z',
-      },
-      {
-        id: 'tf-2',
-        member_id: 'mem-1',
-        trainer_id: 'tr-1',
-        trainer_name: 'Coach Rohit Deshmukh',
-        month: 10, // October
-        year: 2026,
-        rating: 5,
-        feedback: 'Solid month of foundational hypertrophy. Consistent 4-day gym attendance without a single missed session. Recovery rate has visibly improved.',
-        focus_areas: ['Bench Scapular Retraction', 'Hydration (3.5L daily)'],
-        recommendations: 'Transition from 10-rep sets to heavy 6-8 rep brackets on compound lifts.',
-        created_at: '2026-10-31T18:00:00Z',
-      },
-      {
-        id: 'tf-3',
-        member_id: 'mem-2',
-        trainer_id: 'tr-2',
-        trainer_name: 'Priya Bhagat',
-        month: 11, // November
-        year: 2026,
-        rating: 5,
-        feedback: 'Priya has made tremendous progress in metabolic endurance! Her stamina in both morning Zumba batches and kettlebell circuits has jumped significantly. Body composition shows noticeable inch loss around the waist.',
-        focus_areas: ['Kettlebell Hip Snap Speed', 'Core Bracing during Walking Lunges', 'Pre-workout Fuel'],
-        recommendations: 'Increase kettlebell swing weight from 12kg to 16kg and maintain current dietary deficit.',
-        created_at: '2026-11-14T09:30:00Z',
-      },
-    ]
-    setItem(KEYS.TRAINER_FEEDBACK, initialFeedback)
-  }
 
 
   try {
@@ -1694,10 +1309,7 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
 
 
 function seedDatabase() {
-  const today = new Date()
-  const todayStr = format(today, 'yyyy-MM-dd')
-
-  // 1. Membership Plans
+  // 1. Membership Plans (Core Pricing Structure)
   if (!localStorage.getItem(KEYS.PLANS)) {
     const initialPlans: MembershipPlan[] = MEMBERSHIP_PLANS_DEFAULT.map((p) => ({
       ...p,
@@ -1707,1035 +1319,172 @@ function seedDatabase() {
     setLocalSeed(KEYS.PLANS, initialPlans)
   }
 
-  // 1b. Gallery Items (Gym Interior, Equipment, Training)
+  // 2. Gallery Items (Gym Interior, Equipment, Training Photos)
   if (!localStorage.getItem(KEYS.GALLERY)) {
     setLocalSeed(KEYS.GALLERY, GALLERY_ITEMS_DEFAULT)
   }
 
-  // 2. Trainers
+  // 3. Exercise Library Master (30 core gym exercises)
+  if (!localStorage.getItem(KEYS.EXERCISE_LIBRARY)) {
+    setLocalSeed(KEYS.EXERCISE_LIBRARY, DEFAULT_EXERCISE_LIBRARY)
+  }
+
+  // 4. Core Workout Plan Templates
+  const existingWorkouts: WorkoutPlan[] = getItem<WorkoutPlan[]>(KEYS.WORKOUTS, [])
+  if (existingWorkouts.length === 0) {
+    setLocalSeed(KEYS.WORKOUTS, CORE_DEFAULT_WORKOUT_PLANS)
+  } else {
+    let updatedWorkouts = [...existingWorkouts]
+    let modified = false
+    CORE_DEFAULT_WORKOUT_PLANS.forEach((defPlan) => {
+      const found = updatedWorkouts.some((w) => w.id === defPlan.id || w.name === defPlan.name)
+      if (!found) {
+        updatedWorkouts.push(defPlan)
+        modified = true
+      }
+    })
+    if (modified) {
+      setLocalSeed(KEYS.WORKOUTS, updatedWorkouts)
+    }
+  }
+
+  // 5. Trainers (Clean list - ready for real coaches to be registered by Admin)
   if (!localStorage.getItem(KEYS.TRAINERS)) {
-    const initialTrainers: Trainer[] = TRAINERS_DEMO.map((t, idx) => ({
-      id: t.id,
-      profile_id: `profile-trainer-${idx + 1}`,
-      name: t.name,
-      phone: t.phone,
-      email: `${t.name.toLowerCase().replace(/\s+/g, '.')}@corpuss.com`,
-      password: 'CFC@TRN2026',
-      specialization: t.specialization,
-      experience: t.experience,
-      certifications: ['Certified Personal Trainer (CPT)', 'Sports Nutrition Specialist'],
-      bio: t.bio,
-      photo: t.photo,
-      is_active: true,
-      assigned_member_count: 8 + idx * 3,
-      created_at: new Date().toISOString(),
-      profile: {
-        id: `profile-trainer-${idx + 1}`,
-        full_name: t.name,
-        phone: t.phone,
-        email: `${t.name.toLowerCase().replace(/\s+/g, '.')}@corpuss.com`,
-        role: 'trainer',
-        avatar_url: t.photo,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    }))
-    setLocalSeed(KEYS.TRAINERS, initialTrainers)
+    setLocalSeed(KEYS.TRAINERS, [])
   }
 
-  // 3. Members
+  // 6. Members (Real member Yuvraj Vaidya only - No fake demo members)
+  const YUVRAJ_MEMBER: Member = {
+    id: 'mem-6',
+    profile_id: 'prof-6',
+    member_id: 'CFC-2026-0006',
+    gender: 'male',
+    date_of_birth: '1998-01-01',
+    address: 'Harshraj Colony, VMV Road, Amravati, Maharashtra 444604',
+    emergency_contact: 'Family Contact',
+    emergency_phone: '+91 76206 83995',
+    registration_date: '2026-01-15',
+    fitness_goal: 'Strength & Conditioning',
+    status: 'active',
+    current_plan_id: 'ms-6',
+    photo_url: null,
+    email: 'yuvraj.vaidya@corpuss.com',
+    password: 'CFC@2026',
+    notes: 'Registered Corpus Fitness Club Member',
+    created_at: '2026-01-15T10:00:00Z',
+    updated_at: '2026-01-15T10:00:00Z',
+    profile: {
+      id: 'prof-6',
+      full_name: 'Yuvraj Vaidya',
+      phone: '+91 76206 83995',
+      email: 'yuvraj.vaidya@corpuss.com',
+      role: 'member',
+      avatar_url: null,
+      created_at: '2026-01-15T10:00:00Z',
+      updated_at: '2026-01-15T10:00:00Z',
+    },
+    current_plan: {
+      id: 'ms-6',
+      member_id: 'mem-6',
+      plan_id: 'annual',
+      start_date: '2026-01-15',
+      end_date: '2027-01-15',
+      amount_paid: 5000,
+      payment_method: 'UPI',
+      status: 'active',
+      created_at: '2026-01-15T10:00:00Z',
+      plan: {
+        id: 'annual',
+        name: 'Yearly Plan',
+        duration_type: '12 Months',
+        duration_months: 12,
+        price_men: 5000,
+        price_women: 4000,
+        price: 5000,
+        description: '365 days unlimited gym access',
+        is_active: true,
+        created_at: '2025-01-01',
+      },
+    },
+  }
+
   if (!localStorage.getItem(KEYS.MEMBERS)) {
-    const initialMembers: Member[] = [
-      {
-        id: 'mem-1',
-        profile_id: 'prof-1',
-        member_id: 'CFC-2026-0001',
-        gender: 'male',
-        date_of_birth: '1996-05-14',
-        address: 'Rukmini Nagar, VMV Road, Amravati',
-        emergency_contact: 'Suresh Sharma (Father)',
-        emergency_phone: '+91 94221 11223',
-        registration_date: '2025-06-10',
-        fitness_goal: 'Muscle Building & Hypertrophy',
-        status: 'active',
-        current_plan_id: 'ms-1',
-        photo_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-        email: 'rahul.sharma@corpuss.com',
-        password: 'CFC@2026',
-        notes: 'Consistent bench presser. Targeting 100kg PR.',
-        created_at: '2025-06-10T09:30:00Z',
-        updated_at: '2026-01-10T09:30:00Z',
-        profile: {
-          id: 'prof-1',
-          full_name: 'Rahul Sharma',
-          phone: '+91 94231 55667',
-          email: 'rahul.sharma@corpuss.com',
-          role: 'member',
-          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-          created_at: '2025-06-10T09:30:00Z',
-          updated_at: '2026-01-10T09:30:00Z',
-        },
-        current_plan: {
-          id: 'ms-1',
-          member_id: 'mem-1',
-          plan_id: 'annual',
-          start_date: '2025-06-10',
-          end_date: format(subDays(today, -180), 'yyyy-MM-dd'),
-          amount_paid: 5000,
-          payment_method: 'UPI',
-          status: 'active',
-          created_at: '2025-06-10T09:30:00Z',
-          plan: {
-            id: 'annual',
-            name: 'Yearly Plan',
-            duration_type: '12 Months',
-            duration_months: 12,
-            price_men: 5000,
-            price_women: 4000,
-            price: 5000,
-            description: '365 days unlimited gym access',
-            is_active: true,
-            created_at: '2025-01-01',
-          },
-        },
-      },
-      {
-        id: 'mem-2',
-        profile_id: 'prof-2',
-        member_id: 'CFC-2026-0002',
-        gender: 'female',
-        date_of_birth: '1998-09-22',
-        address: 'Harshraj Colony, Near SBI, VMV Road, Amravati',
-        emergency_contact: 'Dr. Vivek Deshmukh (Husband)',
-        emergency_phone: '+91 98223 34455',
-        registration_date: '2025-08-15',
-        fitness_goal: 'Weight Loss & Zumba',
-        status: 'active',
-        current_plan_id: 'ms-2',
-        photo_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80',
-        email: 'priya.deshmukh@corpuss.com',
-        password: 'CFC@2026',
-        notes: 'Attends morning 7:00 AM Zumba batch regularly.',
-        created_at: '2025-08-15T08:00:00Z',
-        updated_at: '2026-02-15T08:00:00Z',
-        profile: {
-          id: 'prof-2',
-          full_name: 'Priya Deshmukh',
-          phone: '+91 98901 23456',
-          email: 'priya.deshmukh@corpuss.com',
-          role: 'member',
-          avatar_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80',
-          created_at: '2025-08-15T08:00:00Z',
-          updated_at: '2026-02-15T08:00:00Z',
-        },
-        current_plan: {
-          id: 'ms-2',
-          member_id: 'mem-2',
-          plan_id: 'half-yearly',
-          start_date: '2025-08-15',
-          end_date: format(subDays(today, -60), 'yyyy-MM-dd'),
-          amount_paid: 2500,
-          payment_method: 'UPI',
-          status: 'active',
-          created_at: '2025-08-15T08:00:00Z',
-          plan: {
-            id: 'half-yearly',
-            name: 'Half-Yearly Plan',
-            duration_type: '6 Months',
-            duration_months: 6,
-            price_men: 3200,
-            price_women: 2500,
-            price: 2500,
-            description: 'Zumba and Aerobics included',
-            is_active: true,
-            created_at: '2025-01-01',
-          },
-        },
-      },
-      {
-        id: 'mem-3',
-        profile_id: 'prof-3',
-        member_id: 'CFC-2026-0003',
-        gender: 'male',
-        date_of_birth: '1994-11-03',
-        address: 'Gadge Nagar, Amravati',
-        emergency_contact: 'Ramesh Verma',
-        emergency_phone: '+91 94211 44556',
-        registration_date: '2025-10-01',
-        fitness_goal: 'Strength Training',
-        status: 'active',
-        current_plan_id: 'ms-3',
-        photo_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-        email: 'amit.verma@corpuss.com',
-        password: 'CFC@2026',
-        created_at: '2025-10-01T10:00:00Z',
-        updated_at: '2026-03-01T10:00:00Z',
-        profile: {
-          id: 'prof-3',
-          full_name: 'Amit Verma',
-          phone: '+91 97654 11223',
-          email: 'amit.verma@corpuss.com',
-          role: 'member',
-          avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-          created_at: '2025-10-01T10:00:00Z',
-          updated_at: '2026-03-01T10:00:00Z',
-        },
-        current_plan: {
-          id: 'ms-3',
-          member_id: 'mem-3',
-          plan_id: 'quarterly',
-          start_date: '2025-10-01',
-          end_date: format(subDays(today, -20), 'yyyy-MM-dd'),
-          amount_paid: 1800,
-          payment_method: 'Cash',
-          status: 'active',
-          created_at: '2025-10-01T10:00:00Z',
-          plan: {
-            id: 'quarterly',
-            name: 'Quarterly Plan',
-            duration_type: '3 Months',
-            duration_months: 3,
-            price_men: 1800,
-            price_women: 1400,
-            price: 1800,
-            description: '3 months full gym access',
-            is_active: true,
-            created_at: '2025-01-01',
-          },
-        },
-      },
-      {
-        id: 'mem-4',
-        profile_id: 'prof-4',
-        member_id: 'CFC-2026-0004',
-        gender: 'female',
-        date_of_birth: '2001-03-19',
-        address: 'Camp Road, Near Bus Stand, Amravati',
-        emergency_contact: 'Sunita Patil (Mother)',
-        emergency_phone: '+91 98811 77889',
-        registration_date: '2025-03-10',
-        fitness_goal: 'Cardio Fitness & Body Toning',
-        status: 'expired',
-        current_plan_id: 'ms-4',
-        photo_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-        email: 'neha.patil@corpuss.com',
-        password: 'CFC@2026',
-        created_at: '2025-03-10T11:00:00Z',
-        updated_at: '2025-09-10T11:00:00Z',
-        profile: {
-          id: 'prof-4',
-          full_name: 'Neha Patil',
-          phone: '+91 98234 56789',
-          email: 'neha.patil@corpuss.com',
-          role: 'member',
-          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-          created_at: '2025-03-10T11:00:00Z',
-          updated_at: '2025-09-10T11:00:00Z',
-        },
-        current_plan: {
-          id: 'ms-4',
-          member_id: 'mem-4',
-          plan_id: 'monthly',
-          start_date: '2025-03-10',
-          end_date: format(subDays(today, 12), 'yyyy-MM-dd'),
-          amount_paid: 500,
-          payment_method: 'Cash',
-          status: 'expired',
-          created_at: '2025-03-10T11:00:00Z',
-          plan: {
-            id: 'monthly',
-            name: 'Monthly Plan',
-            duration_type: '1 Month',
-            duration_months: 1,
-            price_men: 700,
-            price_women: 500,
-            price: 500,
-            description: '1 month basic access',
-            is_active: true,
-            created_at: '2025-01-01',
-          },
-        },
-      },
-      {
-        id: 'mem-5',
-        profile_id: 'prof-5',
-        member_id: 'CFC-2026-0005',
-        gender: 'male',
-        date_of_birth: '1992-07-28',
-        address: 'Sai Nagar, Amravati',
-        emergency_contact: 'Ajay Rathore (Brother)',
-        emergency_phone: '+91 94030 99887',
-        registration_date: '2025-11-01',
-        fitness_goal: 'Powerlifting & Strength',
-        status: 'active',
-        current_plan_id: 'ms-5',
-        photo_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
-        email: 'vikram.rathore@corpuss.com',
-        password: 'CFC@2026',
-        created_at: '2025-11-01T07:00:00Z',
-        updated_at: '2026-03-01T07:00:00Z',
-        profile: {
-          id: 'prof-5',
-          full_name: 'Vikram Rathore',
-          phone: '+91 99223 88776',
-          email: 'vikram.rathore@corpuss.com',
-          role: 'member',
-          avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
-          created_at: '2025-11-01T07:00:00Z',
-          updated_at: '2026-03-01T07:00:00Z',
-        },
-        current_plan: {
-          id: 'ms-5',
-          member_id: 'mem-5',
-          plan_id: 'half-yearly',
-          start_date: '2025-11-01',
-          end_date: format(subDays(today, -5), 'yyyy-MM-dd'),
-          amount_paid: 3200,
-          payment_method: 'UPI',
-          status: 'active',
-          created_at: '2025-11-01T07:00:00Z',
-          plan: {
-            id: 'half-yearly',
-            name: 'Half-Yearly Plan',
-            duration_type: '6 Months',
-            duration_months: 6,
-            price_men: 3200,
-            price_women: 2500,
-            price: 3200,
-            description: 'Half-yearly commitment',
-            is_active: true,
-            created_at: '2025-01-01',
-          },
-        },
-      },
-      {
-        id: 'mem-6',
-        profile_id: 'prof-6',
-        member_id: 'CFC-2026-0006',
-        gender: 'male',
-        date_of_birth: '1998-01-01',
-        address: 'Harshraj Colony, VMV Road, Amravati, Maharashtra 444604',
-        emergency_contact: 'Family Contact',
-        emergency_phone: '+91 76206 83995',
-        registration_date: '2026-01-15',
-        fitness_goal: 'Strength & Conditioning',
-        status: 'active',
-        current_plan_id: 'ms-6',
-        photo_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-        email: 'yuvraj.vaidya@corpuss.com',
-        password: 'CFC@2026',
-        created_at: '2026-01-15T10:00:00Z',
-        updated_at: '2026-01-15T10:00:00Z',
-        profile: {
-          id: 'prof-6',
-          full_name: 'Yuvraj Vaidya',
-          phone: '+91 76206 83995',
-          email: 'yuvraj.vaidya@corpuss.com',
-          role: 'member',
-          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-          created_at: '2026-01-15T10:00:00Z',
-          updated_at: '2026-01-15T10:00:00Z',
-        },
-        current_plan: {
-          id: 'ms-6',
-          member_id: 'mem-6',
-          plan_id: 'annual',
-          start_date: '2026-01-15',
-          end_date: '2027-01-15',
-          amount_paid: 5000,
-          payment_method: 'UPI',
-          status: 'active',
-          created_at: '2026-01-15T10:00:00Z',
-          plan: {
-            id: 'annual',
-            name: 'Yearly Plan',
-            duration_type: '12 Months',
-            duration_months: 12,
-            price_men: 5000,
-            price_women: 4000,
-            price: 5000,
-            description: '365 days unlimited gym access',
-            is_active: true,
-            created_at: '2025-01-01',
-          },
-        },
-      },
-    ]
-    setLocalSeed(KEYS.MEMBERS, initialMembers)
+    setLocalSeed(KEYS.MEMBERS, [YUVRAJ_MEMBER])
   }
 
-  // 4. Payments
-  if (!localStorage.getItem(KEYS.PAYMENTS)) {
-    const initialPayments: Payment[] = [
-      {
-        id: 'pay-1',
-        member_id: 'mem-1',
-        membership_id: 'ms-1',
-        amount: 5000,
-        total_amount: 5000,
-        pending_amount: 0,
-        payment_method: 'UPI',
-        transaction_ref: 'UPI/2026/091823901',
-        status: 'paid',
-        payment_date: todayStr,
-        receipt_number: 'CFC-REC-2026-0001',
-        notes: 'Annual Membership full payment received via PhonePe UPI',
-        recorded_by: 'CFC Reception',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'pay-2',
-        member_id: 'mem-2',
-        membership_id: 'ms-2',
-        amount: 2500,
-        total_amount: 2500,
-        pending_amount: 0,
-        payment_method: 'UPI',
-        transaction_ref: 'UPI/2026/087123491',
-        status: 'paid',
-        payment_date: todayStr,
-        receipt_number: 'CFC-REC-2026-0002',
-        notes: 'Half-Yearly Women Membership payment via GooglePay',
-        recorded_by: 'CFC Reception',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'pay-3',
-        member_id: 'mem-3',
-        membership_id: 'ms-3',
-        amount: 1500,
-        total_amount: 1800,
-        pending_amount: 300,
-        payment_method: 'Cash',
-        transaction_ref: null,
-        status: 'partial',
-        payment_date: format(subDays(today, 2), 'yyyy-MM-dd'),
-        receipt_number: 'CFC-REC-2026-0003',
-        notes: 'Partial payment ₹1500 in Cash, ₹300 pending by next Monday',
-        recorded_by: 'CFC Reception',
-        created_at: subDays(today, 2).toISOString(),
-      },
-      {
-        id: 'pay-4',
-        member_id: 'mem-5',
-        membership_id: 'ms-5',
-        amount: 3200,
-        total_amount: 3200,
-        pending_amount: 0,
-        payment_method: 'Bank Transfer',
-        transaction_ref: 'NEFT-SBI-99214',
-        status: 'paid',
-        payment_date: format(subDays(today, 5), 'yyyy-MM-dd'),
-        receipt_number: 'CFC-REC-2026-0004',
-        notes: 'Full payment through SBI Net Banking',
-        recorded_by: 'CFC Admin',
-        created_at: subDays(today, 5).toISOString(),
-      },
-    ]
-    setLocalSeed(KEYS.PAYMENTS, initialPayments)
-  }
+  // 7. Initialize empty clean collections for transactions & logs
+  if (!localStorage.getItem(KEYS.PAYMENTS)) setLocalSeed(KEYS.PAYMENTS, [])
+  if (!localStorage.getItem(KEYS.ATTENDANCE)) setLocalSeed(KEYS.ATTENDANCE, [])
+  if (!localStorage.getItem(KEYS.ENQUIRIES)) setLocalSeed(KEYS.ENQUIRIES, [])
+  if (!localStorage.getItem(KEYS.EXPENSES)) setLocalSeed(KEYS.EXPENSES, [])
+  if (!localStorage.getItem(KEYS.PROGRESS)) setLocalSeed(KEYS.PROGRESS, [])
+  if (!localStorage.getItem(KEYS.RENEWALS)) setLocalSeed(KEYS.RENEWALS, [])
+  if (!localStorage.getItem(KEYS.ASSIGNMENTS)) setLocalSeed(KEYS.ASSIGNMENTS, [])
+  if (!localStorage.getItem(KEYS.WORKOUT_SESSIONS)) setLocalSeed(KEYS.WORKOUT_SESSIONS, [])
+  if (!localStorage.getItem(KEYS.TRAINER_FEEDBACK)) setLocalSeed(KEYS.TRAINER_FEEDBACK, [])
+  if (!localStorage.getItem(KEYS.NOTIFICATIONS)) setLocalSeed(KEYS.NOTIFICATIONS, [])
 
-  // 5. Attendance
-  if (!localStorage.getItem(KEYS.ATTENDANCE)) {
-    const initialAttendance: Attendance[] = [
-      {
-        id: 'att-1',
-        member_id: 'mem-1',
-        check_in: `${todayStr}T06:35:12`,
-        check_out: `${todayStr}T08:05:00`,
-        method: 'qr',
-        recorded_by: 'Scanner Machine 1',
-      },
-      {
-        id: 'att-2',
-        member_id: 'mem-2',
-        check_in: `${todayStr}T07:05:44`,
-        check_out: `${todayStr}T08:20:10`,
-        method: 'qr',
-        recorded_by: 'Scanner Machine 1',
-      },
-      {
-        id: 'att-3',
-        member_id: 'mem-3',
-        check_in: `${todayStr}T07:45:00`,
-        check_out: null,
-        method: 'manual',
-        recorded_by: 'Reception Desk',
-      },
-      {
-        id: 'att-4',
-        member_id: 'mem-5',
-        check_in: `${todayStr}T06:15:30`,
-        check_out: `${todayStr}T07:45:00`,
-        method: 'qr',
-        recorded_by: 'Scanner Machine 1',
-      },
-    ]
-    setLocalSeed(KEYS.ATTENDANCE, initialAttendance)
-  }
-
-  // 6. Enquiries CRM
-  if (!localStorage.getItem(KEYS.ENQUIRIES)) {
-    const initialEnquiries: Enquiry[] = [
-      {
-        id: 'enq-1',
-        reference_no: 'CFC-ENQ-2026-0041',
-        full_name: 'Aniket Deshmukh',
-        phone: '+91 97654 99001',
-        email: 'aniket.d@gmail.com',
-        gender: 'male',
-        age: 24,
-        interested_plan: 'Half-Yearly Plan',
-        fitness_goal: 'Weight Loss & Muscle Gain',
-        message: 'Looking for morning 6:30 AM batch and personal trainer assistance.',
-        status: 'new',
-        lead_source: 'Website Enquiry Form',
-        follow_up_date: format(subDays(today, -1), 'yyyy-MM-dd'),
-        assigned_staff: 'Coach Rohit Deshmukh',
-        notes: 'Interested in gym + aerobics combo. Call tomorrow morning.',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'enq-2',
-        reference_no: 'CFC-ENQ-2026-0042',
-        full_name: 'Snehal Kulkarni',
-        phone: '+91 94228 11442',
-        email: 'snehal.kulkarni@yahoo.co.in',
-        gender: 'female',
-        age: 28,
-        interested_plan: 'Yearly Plan',
-        fitness_goal: 'Zumba & Aerobics Conditioning',
-        message: 'Visited gym last week with friend, wanted to confirm evening women batch timings.',
-        status: 'contacted',
-        lead_source: 'Walk-in Visit',
-        follow_up_date: format(subDays(today, -2), 'yyyy-MM-dd'),
-        assigned_staff: 'Priya Bhagat',
-        notes: 'Offered 10% annual bundle discount. Likely to join on Monday.',
-        created_at: subDays(today, 1).toISOString(),
-      },
-      {
-        id: 'enq-3',
-        reference_no: 'CFC-ENQ-2026-0043',
-        full_name: 'Gaurav Thakre',
-        phone: '+91 98900 22334',
-        email: 'gaurav.thakre@rediffmail.com',
-        gender: 'male',
-        age: 21,
-        interested_plan: 'Quarterly Plan',
-        fitness_goal: 'Powerlifting & Strength',
-        message: 'VMV College student, inquiry for student membership discount.',
-        status: 'interested',
-        lead_source: 'Instagram',
-        follow_up_date: format(subDays(today, -3), 'yyyy-MM-dd'),
-        assigned_staff: 'Coach Rohit Deshmukh',
-        notes: 'Informed about college ID concession. Will visit with college ID card.',
-        created_at: subDays(today, 3).toISOString(),
-      },
-    ]
-    setLocalSeed(KEYS.ENQUIRIES, initialEnquiries)
-  }
-
-  // 7. Expenses
-  if (!localStorage.getItem(KEYS.EXPENSES)) {
-    const initialExpenses: Expense[] = [
-      {
-        id: 'exp-1',
-        category: 'Rent',
-        amount: 25000,
-        expense_date: format(today, 'yyyy-MM-05'),
-        description: 'Monthly Premises Rent for 3rd Floor, SBI Building, VMV Road',
-        payment_method: 'Bank Transfer',
-        recorded_by: 'Super Admin',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'exp-2',
-        category: 'Electricity',
-        amount: 12400,
-        expense_date: format(today, 'yyyy-MM-08'),
-        description: 'MSEDCL Electricity bill payment for ACs and gym lighting',
-        payment_method: 'UPI',
-        recorded_by: 'Super Admin',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'exp-3',
-        category: 'Maintenance',
-        amount: 4200,
-        expense_date: format(today, 'yyyy-MM-10'),
-        description: 'Cable replacement and treadmill servicing & lubrication',
-        payment_method: 'Cash',
-        recorded_by: 'Head Trainer Rohit',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'exp-4',
-        category: 'Salary',
-        amount: 40000,
-        expense_date: format(today, 'yyyy-MM-01'),
-        description: 'Trainer and housekeeping staff monthly salaries',
-        payment_method: 'Bank Transfer',
-        recorded_by: 'Super Admin',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'exp-5',
-        category: 'Marketing',
-        amount: 5500,
-        expense_date: format(today, 'yyyy-MM-07'),
-        description: 'Local Amravati college flyer distribution and Instagram promotions',
-        payment_method: 'UPI',
-        recorded_by: 'Gym Admin',
-        created_at: new Date().toISOString(),
-      },
-    ]
-    setLocalSeed(KEYS.EXPENSES, initialExpenses)
-  }
-
-  // 8. Workout Plans
-  if (!localStorage.getItem(KEYS.WORKOUTS)) {
-    const initialWorkouts: WorkoutPlan[] = [
-      {
-        id: 'wp-1',
-        name: '4-Day Hypertrophy Muscle Builder',
-        category: 'Muscle Building',
-        level: 'intermediate',
-        description: 'Scientific push-pull-legs-arms routine optimized for muscle thickness and balanced symmetry.',
-        trainer_name: 'Coach Rohit Deshmukh',
-        is_active: true,
-        created_at: new Date().toISOString(),
-        exercises: [
-          {
-            id: 'ex-1',
-            plan_id: 'wp-1',
-            name: 'Barbell Flat Bench Press',
-            muscle_group: 'Chest',
-            sets: 4,
-            reps: '8 - 12',
-            weight: '60-80 kg',
-            rest_seconds: 90,
-            day_of_week: 'Monday',
-            instructions: 'Retract scapula, lower bar with control to mid-chest, drive through chest.',
-          },
-          {
-            id: 'ex-2',
-            plan_id: 'wp-1',
-            name: 'Incline Dumbbell Press',
-            muscle_group: 'Upper Chest',
-            sets: 3,
-            reps: '10 - 12',
-            weight: '22.5 kg',
-            rest_seconds: 60,
-            day_of_week: 'Monday',
-            instructions: '30-degree incline, full stretch at the bottom without flaring elbows.',
-          },
-          {
-            id: 'ex-3',
-            plan_id: 'wp-1',
-            name: 'Lat Pulldowns',
-            muscle_group: 'Back',
-            sets: 4,
-            reps: '10 - 12',
-            weight: '55 kg',
-            rest_seconds: 60,
-            day_of_week: 'Tuesday',
-            instructions: 'Wide grip, pull toward clavicle while leading with elbows.',
-          },
-          {
-            id: 'ex-4',
-            plan_id: 'wp-1',
-            name: 'Barbell Back Squat',
-            muscle_group: 'Legs',
-            sets: 4,
-            reps: '8 - 10',
-            weight: '80-100 kg',
-            rest_seconds: 120,
-            day_of_week: 'Wednesday',
-            instructions: 'Feet shoulder-width, break at hips and knees simultaneously to parallel.',
-          },
-          {
-            id: 'ex-5',
-            plan_id: 'wp-1',
-            name: 'Overhead Barbell Military Press',
-            muscle_group: 'Shoulders',
-            sets: 4,
-            reps: '8 - 10',
-            weight: '40 kg',
-            rest_seconds: 90,
-            day_of_week: 'Thursday',
-            instructions: 'Brace core glutes, press overhead vertically through full lockout.',
-          },
-        ],
-      },
-      {
-        id: 'wp-2',
-        name: 'High Intensity Fat-Loss Circuit',
-        category: 'Weight Loss',
-        level: 'beginner',
-        description: 'Full body metabolic resistance training combined with aerobic burst intervals.',
-        trainer_name: 'Priya Bhagat',
-        is_active: true,
-        created_at: new Date().toISOString(),
-        exercises: [
-          {
-            id: 'ex-6',
-            plan_id: 'wp-2',
-            name: 'Goblet Squat to Press',
-            muscle_group: 'Full Body',
-            sets: 3,
-            reps: '15',
-            weight: '12 kg',
-            rest_seconds: 45,
-            day_of_week: 'Monday',
-            instructions: 'Hold dumbbell at chest, squat deep and press directly overhead upon standing.',
-          },
-          {
-            id: 'ex-7',
-            plan_id: 'wp-2',
-            name: 'Mountain Climbers & Plank',
-            muscle_group: 'Core',
-            sets: 4,
-            reps: '45 seconds',
-            rest_seconds: 30,
-            day_of_week: 'Monday',
-            instructions: 'Keep hips low and drive knees alternately toward chest rapidly.',
-          },
-          {
-            id: 'ex-8',
-            plan_id: 'wp-2',
-            name: 'Treadmill Incline Sprints',
-            muscle_group: 'Cardio',
-            sets: 6,
-            reps: '1 min sprint / 1 min walk',
-            rest_seconds: 60,
-            day_of_week: 'Wednesday',
-            instructions: '8-10% incline at 10-12 km/h for maximum EPOC metabolic afterburn.',
-          },
-        ],
-      },
-    ]
-    setLocalSeed(KEYS.WORKOUTS, initialWorkouts)
-  }
-
-  // 9. Diet Plans
-  if (!localStorage.getItem(KEYS.DIETS)) {
-    const initialDiets: DietPlan[] = [
-      {
-        id: 'dp-1',
-        name: 'High-Protein Muscle Fuel (Indian Diet)',
-        goal: 'Muscle Gain & Strength',
-        total_calories: 2350,
-        protein_g: 145,
-        carbs_g: 260,
-        fats_g: 65,
-        water_liters: 4,
-        trainer_name: 'Amit Thakre',
-        is_active: true,
-        created_at: new Date().toISOString(),
-        meals: [
-          {
-            id: 'm-1',
-            diet_plan_id: 'dp-1',
-            meal_type: 'Breakfast',
-            food_item: 'Oats with Milk, Banana, Almonds & 3 Boiled Egg Whites',
-            quantity: '1 large bowl + 3 eggs',
-            calories: 520,
-            protein_g: 28,
-            carbs_g: 65,
-            fats_g: 12,
-            notes: 'Option: substitute eggs with 100g Paneer bhurji for vegetarians.',
-          },
-          {
-            id: 'm-2',
-            diet_plan_id: 'dp-1',
-            meal_type: 'Mid-Morning Snack',
-            food_item: 'Roasted Chana, Sprouts Salad with lemon, Green Tea',
-            quantity: '1 cup sprouts + 1 cup tea',
-            calories: 220,
-            protein_g: 14,
-            carbs_g: 32,
-            fats_g: 4,
-            notes: 'High fiber, aids digestion and sustained morning energy.',
-          },
-          {
-            id: 'm-3',
-            diet_plan_id: 'dp-1',
-            meal_type: 'Lunch',
-            food_item: 'Grilled Chicken Breast or Low-fat Paneer, 3 Chapati, Dal & Salad',
-            quantity: '150g protein source + 3 chapatis',
-            calories: 680,
-            protein_g: 45,
-            carbs_g: 75,
-            fats_g: 18,
-            notes: 'Use cold-pressed mustard or olive oil. Avoid deep-fried items.',
-          },
-          {
-            id: 'm-4',
-            diet_plan_id: 'dp-1',
-            meal_type: 'Evening Snack',
-            food_item: 'Peanut Butter Whole Wheat Toast & Whey Protein Shake / Sattu',
-            quantity: '2 slices + 1 scoop',
-            calories: 380,
-            protein_g: 30,
-            carbs_g: 35,
-            fats_g: 11,
-            notes: 'Consume 45 minutes before gym session.',
-          },
-          {
-            id: 'm-5',
-            diet_plan_id: 'dp-1',
-            meal_type: 'Dinner',
-            food_item: 'Steamed Brown Rice / Quinoa, Paneer / Fish Tikka, Mixed Veg Sabzi',
-            quantity: '1 bowl rice + 120g protein',
-            calories: 550,
-            protein_g: 28,
-            carbs_g: 53,
-            fats_g: 20,
-            notes: 'Eat at least 2 hours before bedtime.',
-          },
-        ],
-      },
-    ]
-    setLocalSeed(KEYS.DIETS, initialDiets)
-  }
-
-  // 10. Progress
-  if (!localStorage.getItem(KEYS.PROGRESS)) {
-    const initialProgress: FitnessProgress[] = [
-      {
-        id: 'prog-1',
-        member_id: 'mem-1',
-        recorded_date: format(subMonths(today, 3), 'yyyy-MM-dd'),
-        weight_kg: 84.5,
-        body_fat_pct: 22.5,
-        chest_cm: 101,
-        waist_cm: 92,
-        biceps_cm: 34,
-        notes: 'Initial baseline assessment at CFC.',
-      },
-      {
-        id: 'prog-2',
-        member_id: 'mem-1',
-        recorded_date: format(subMonths(today, 1), 'yyyy-MM-dd'),
-        weight_kg: 80.2,
-        body_fat_pct: 18.0,
-        chest_cm: 104,
-        waist_cm: 86,
-        biceps_cm: 36.5,
-        notes: 'Visible increase in upper chest fullness and waist reduction.',
-      },
-      {
-        id: 'prog-3',
-        member_id: 'mem-1',
-        recorded_date: todayStr,
-        weight_kg: 78.0,
-        body_fat_pct: 15.2,
-        chest_cm: 106,
-        waist_cm: 82,
-        biceps_cm: 38.0,
-        notes: 'Met 6-month goal! Increased bench press and visible abs.',
-      },
-    ]
-    setLocalSeed(KEYS.PROGRESS, initialProgress)
-  }
-
-  // 14. Notifications & Club Broadcasts (Admin to Members)
-  if (!localStorage.getItem(KEYS.NOTIFICATIONS)) {
-    const initialNotifications: NotificationItem[] = [
-      {
-        id: 'notif-1',
-        title: 'Sunday Deep Sanitization & Maintenance Notice',
-        message: 'Dear Members, Corpus Fitness Club Amravati facility will remain closed this Sunday as scheduled for floor sanitization, dumbbell rack realignment, and cable machine servicing. Regular hours resume Monday 6:00 AM sharp.',
-        type: 'warning',
-        priority: 'high',
-        target_audience: 'all',
-        sent_by: 'CFC Admin Office',
-        read: false,
-        is_read: false,
-        channels: ['in_app', 'whatsapp'],
-        created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-      },
-      {
-        id: 'notif-2',
-        title: 'Summer Shift Hours & Entry QR Reminder',
-        message: 'Reminder of club hours: Morning 6:00 AM – 11:00 AM & Evening 5:00 PM – 10:00 PM. Please scan your personal digital QR code at the reception counter before entering the workout area.',
-        type: 'info',
-        priority: 'normal',
-        target_audience: 'all',
-        sent_by: 'CFC Reception',
-        read: false,
-        is_read: false,
-        channels: ['in_app'],
-        created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-      },
-      {
-        id: 'notif-3',
-        title: '30-Day Body Transformation Challenge 2026',
-        message: 'Get ready for our annual fitness showdown! Free body composition assessment, certified trainer guidance, and cash prizes for top 3 transformations. Contact head trainer or front desk to sign up.',
-        type: 'success',
-        priority: 'high',
-        target_audience: 'active_members',
-        sent_by: 'Chief Trainer Vikram',
-        read: true,
-        is_read: true,
-        channels: ['in_app', 'whatsapp'],
-        created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-      },
-      {
-        id: 'notif-4',
-        title: 'New Heavy-Duty Olympic Bumper Plates Arrived',
-        message: 'We have upgraded our deadlift platforms on the 3rd floor with certified Olympic rubber bumper plates and competition collars for heavy lifters. Train hard, stay safe!',
-        type: 'info',
-        priority: 'normal',
-        target_audience: 'all',
-        sent_by: 'CFC Management',
-        read: true,
-        is_read: true,
-        channels: ['in_app'],
-        created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
-      },
-    ]
-    setLocalSeed(KEYS.NOTIFICATIONS, initialNotifications)
-  }
-
-  // 15. Membership Renewal Logs (Record of when customer renewed)
-  if (!localStorage.getItem(KEYS.RENEWALS)) {
-    const initialRenewals: MembershipRenewalLog[] = [
-      {
-        id: 'ren-1',
-        member_id: 'mem-1',
-        member_name: 'Rahul Sharma',
-        member_code: 'CFC-2026-0001',
-        renewal_date: '2026-01-10', // Date when customer renewed
-        previous_plan_name: 'Half-Yearly Plan',
-        previous_expiry_date: '2026-01-10',
-        renewed_plan_id: 'mp-3',
-        renewed_plan_name: 'Half-Yearly Plan (6 Months)',
-        new_start_date: '2026-01-10',
-        new_expiry_date: '2026-07-10',
-        amount_paid: 6000,
-        discount_amount: 500,
-        payment_method: 'UPI',
-        receipt_number: 'CFC-REC-2026-0001',
-        processed_by: 'Gym Admin (CFC)',
-        notes: 'Renewed with New Year 2026 special rate. Free body fat assessment.',
-        created_at: '2026-01-10T10:15:00Z',
-      },
-      {
-        id: 'ren-2',
-        member_id: 'mem-3',
-        member_name: 'Amit Deshmukh',
-        member_code: 'CFC-2026-0003',
-        renewal_date: '2026-02-01',
-        previous_plan_name: 'Quarterly Plan',
-        previous_expiry_date: '2026-02-01',
-        renewed_plan_id: 'mp-4',
-        renewed_plan_name: 'Annual Elite Fitness Plan',
-        new_start_date: '2026-02-01',
-        new_expiry_date: '2027-02-01',
-        amount_paid: 10000,
-        discount_amount: 1000,
-        payment_method: 'Cash',
-        receipt_number: 'CFC-REC-2026-0003',
-        processed_by: 'Reception Desk',
-        notes: 'Upgraded from Quarterly to Annual plan upon expiry.',
-        created_at: '2026-02-01T11:30:00Z',
-      },
-    ]
-    setLocalSeed(KEYS.RENEWALS, initialRenewals)
-  }
-
-  // 16. Auto-Migration: Ensure all members & trainers have valid @corpuss.com emails and passwords
+  // 8. Active LocalStorage Purge: Remove stale demo data from browser storage on any device
   try {
     const rawMembers = localStorage.getItem(KEYS.MEMBERS)
     if (rawMembers) {
-      const storedMembers: Member[] = JSON.parse(rawMembers)
-      let modified = false
-      const updated = storedMembers.map((m) => {
-        let email = (m.email || m.profile?.email || '').toLowerCase().trim()
-        const pass = m.password || 'CFC@2026'
-        if (!email.endsWith('@corpuss.com')) {
-          const namePart = (m.profile?.full_name || 'member')
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, '.')
-            .replace(/\.+/g, '.')
-            .replace(/^\.|\.$/g, '')
-          email = `${namePart}@corpuss.com`
-          modified = true
-        }
-        if (!m.password) modified = true
-        if (!m.email || m.email !== email) modified = true
-
-        // Ensure trainer fields and PT status are properly set
-        if (m.id === 'mem-1' || m.member_id === 'CFC-2026-0001') {
-          m.trainer_id = 'tr-1'
-          m.trainer_name = 'Coach Rohit Deshmukh'
-          m.pt_status = 'active_pt'
-          m.pt_package = '1-on-1 Personal Transformation'
-        } else if (m.id === 'mem-2' || m.member_id === 'CFC-2026-0002') {
-          m.trainer_id = 'tr-2'
-          m.trainer_name = 'Priya Bhagat'
-          m.pt_status = 'active_pt'
-          m.pt_package = 'Fat Loss & Conditioning'
-        } else if (m.id === 'mem-5' || m.member_id === 'CFC-2026-0005') {
-          m.trainer_id = 'tr-3'
-          m.trainer_name = 'Amol Sawant'
-          m.pt_status = 'active_pt'
-          m.pt_package = 'Powerlifting Protocol'
-        } else if (!m.trainer_id) {
-          m.trainer_id = null
-          m.trainer_name = null
-          m.pt_status = 'general_floor'
-        }
-
-        return {
-          ...m,
-          email,
-          password: pass,
-          profile: {
-            ...m.profile!,
-            email,
-          },
-        }
-      })
-      if (modified) {
-        setItem(KEYS.MEMBERS, updated)
+      const stored: Member[] = JSON.parse(rawMembers)
+      const cleaned = stored.filter(
+        (m) =>
+          !FAKE_MEMBER_IDS.has(m?.id) &&
+          !FAKE_MEMBER_EMAILS.has((m?.email || '').toLowerCase()) &&
+          !FAKE_MEMBER_EMAILS.has((m?.profile?.email || '').toLowerCase())
+      )
+      if (cleaned.length !== stored.length) {
+        localStorage.setItem(KEYS.MEMBERS, JSON.stringify(cleaned.length > 0 ? cleaned : [YUVRAJ_MEMBER]))
       }
     }
 
-    const rawTrainers = localStorage.getItem(KEYS.TRAINERS)
-    if (rawTrainers) {
-      const storedTrainers: Trainer[] = JSON.parse(rawTrainers)
-      let modified = false
-      const updated = storedTrainers.map((t) => {
-        let email = (t.email || t.profile?.email || '').toLowerCase().trim()
-        const pass = t.password || 'CFC@TRN2026'
-        if (!email.endsWith('@corpuss.com')) {
-          const namePart = (t.name || 'coach')
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, '.')
-            .replace(/\.+/g, '.')
-            .replace(/^\.|\.$/g, '')
-          email = `${namePart}@corpuss.com`
-          modified = true
-        }
-        if (!t.password) modified = true
-        if (!t.email || t.email !== email) modified = true
-
-        return {
-          ...t,
-          email,
-          password: pass,
-          profile: t.profile ? { ...t.profile, email } : undefined,
-        }
-      })
-      if (modified) {
-        setItem(KEYS.TRAINERS, updated)
+    const demoPurgeKeys = [
+      KEYS.PAYMENTS,
+      KEYS.ATTENDANCE,
+      KEYS.ENQUIRIES,
+      KEYS.EXPENSES,
+      KEYS.PROGRESS,
+      KEYS.RENEWALS,
+      KEYS.ASSIGNMENTS,
+      KEYS.WORKOUT_SESSIONS,
+      KEYS.TRAINER_FEEDBACK,
+      KEYS.NOTIFICATIONS,
+      KEYS.TRAINERS,
+    ]
+    demoPurgeKeys.forEach((k) => {
+      const val = localStorage.getItem(k)
+      if (val) {
+        try {
+          const parsed = JSON.parse(val)
+          if (Array.isArray(parsed)) {
+            const hasDemo = parsed.some((item: any) =>
+              item?.id?.startsWith('pay-') ||
+              item?.id?.startsWith('att-') ||
+              item?.id?.startsWith('enq-') ||
+              item?.id?.startsWith('exp-') ||
+              item?.id?.startsWith('prog-') ||
+              item?.id?.startsWith('ren-') ||
+              item?.id?.startsWith('asg-') ||
+              item?.id?.startsWith('ws-') ||
+              item?.id?.startsWith('tf-') ||
+              item?.id?.startsWith('notif-') ||
+              item?.id?.startsWith('trainer-') ||
+              item?.member_id === 'mem-1' ||
+              item?.member_id === 'mem-2' ||
+              item?.member_id === 'mem-3' ||
+              item?.member_id === 'mem-4' ||
+              item?.member_id === 'mem-5'
+            )
+            if (hasDemo) {
+              localStorage.setItem(k, '[]')
+            }
+          }
+        } catch {}
       }
-    }
-  } catch (err) {
-    console.error('Migration error:', err)
-  }
+    })
+  } catch {}
 }
 
 // Run seed immediately on module import
@@ -2747,7 +1496,13 @@ export const db = {
   // Members
   getMembers(): Member[] {
     const list = getItem<Member[]>(KEYS.MEMBERS, [])
-    return list.map((m) => {
+    const cleaned = list.filter(
+      (m) =>
+        !FAKE_MEMBER_IDS.has(m?.id) &&
+        !FAKE_MEMBER_EMAILS.has((m?.email || '').toLowerCase()) &&
+        !FAKE_MEMBER_EMAILS.has((m?.profile?.email || '').toLowerCase())
+    )
+    return cleaned.map((m) => {
       const photo = m.photo_url || m.profile?.avatar_url || null
       if (photo && (!m.photo_url || !m.profile?.avatar_url)) {
         return {

@@ -207,6 +207,13 @@ export default function ExpensesPage() {
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-center py-12 text-gray-400">
+                    No expense records found.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
