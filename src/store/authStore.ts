@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import type { UserRole, Profile } from '@/types/database'
-import { db, syncDatabaseWithServer } from '@/lib/db'
+import { db, syncDatabaseWithServer, FAKE_MEMBER_IDS, FAKE_MEMBER_EMAILS } from '@/lib/db'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 
 interface AuthState {
@@ -100,10 +100,23 @@ export const useAuthStore = create<AuthState>()(
             const localMembers = db.getMembers()
             const memberMap = new Map<string, any>()
             cloudRow.data.forEach((m: any) => {
+              if (
+                !m ||
+                FAKE_MEMBER_IDS.has(m?.id) ||
+                FAKE_MEMBER_EMAILS.has((m?.email || '').toLowerCase()) ||
+                FAKE_MEMBER_EMAILS.has((m?.profile?.email || '').toLowerCase())
+              )
+                return
               if (m?.id) memberMap.set(m.id, m)
-              if (m?.email) memberMap.set(m.email.toLowerCase(), m)
             })
             localMembers.forEach((m: any) => {
+              if (
+                !m ||
+                FAKE_MEMBER_IDS.has(m?.id) ||
+                FAKE_MEMBER_EMAILS.has((m?.email || '').toLowerCase()) ||
+                FAKE_MEMBER_EMAILS.has((m?.profile?.email || '').toLowerCase())
+              )
+                return
               const mEmail = (m.email || m.profile?.email || '').toLowerCase()
               if (!memberMap.has(m.id) && (!mEmail || !memberMap.has(mEmail))) {
                 memberMap.set(m.id, m)
