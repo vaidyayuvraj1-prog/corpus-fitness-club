@@ -1,0 +1,732 @@
+// Prisma Schema for CORPUS FITNESS CLUB (CFC), Amravati
+// Enterprise Gym Management ERP & Public Website
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum RoleType {
+  SUPER_ADMIN
+  GYM_ADMIN
+  RECEPTIONIST
+  TRAINER
+  MEMBER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  UPCOMING
+  ON_HOLD
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PAID
+  PARTIAL
+  PENDING
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  BANK_TRANSFER
+  OTHER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  CONVERTED
+  NOT_INTERESTED
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  SUCCESS
+  PAYMENT
+  ATTENDANCE
+}
+
+// 1. Roles Table
+model Role {
+  id          String    @id @default(uuid())
+  name        RoleType  @unique
+  description String?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  users       User[]
+
+  @@map("roles")
+}
+
+// 2. Users Table
+model User {
+  id            String         @id @default(uuid())
+  role_id       String
+  role          Role           @relation(fields: [role_id], references: [id], onDelete: Restrict)
+  email         String         @unique
+  phone         String         @unique
+  password_hash String
+  full_name     String
+  is_active     Boolean        @default(true)
+  last_login_at DateTime?
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
+
+  member        Member?
+  trainer       Trainer?
+  notifications Notification[]
+  audit_logs    AuditLog[]
+
+  @@index([email])
+  @@index([phone])
+  @@map("users")
+}
+
+// 3. Members Table
+model Member {
+  id                String             @id @default(uuid())
+  user_id           String             @unique
+  user              User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  member_code       String             @unique // e.g. CFC-2026-0001
+  first_name        String
+  last_name         String
+  email             String             @unique
+  phone             String             @unique
+  date_of_birth     DateTime?
+  gender            Gender
+  blood_group       String?
+  address           String
+  city              String             @default("Amravati")
+  state             String             @default("Maharashtra")
+  pincode           String             @default("444604")
+  emergency_contact String
+  emergency_name    String?
+  photo_url         String?
+  qr_code           String             @unique
+  fitness_goals     String?
+  medical_history   String?
+  joined_date       DateTime           @default(now())
+  status            MembershipStatus   @default(ACTIVE)
+  created_at        DateTime           @default(now())
+  updated_at        DateTime           @updatedAt
+
+  memberships       Membership[]
+  payments          Payment[]
+  attendance        Attendance[]
+  workout_plans     WorkoutPlan[]
+  diet_plans        DietPlan[]
+  fitness_progress  FitnessProgress[]
+  class_bookings    ClassBooking[]
+  trainer_assignments TrainerAssignment[]
+  workout_sessions   WorkoutSession[]
+  trainer_feedback   TrainerFeedback[]
+  member_workouts    MemberWorkout[]
+
+  @@index([member_code])
+  @@index([phone])
+  @@index([status])
+  @@map("members")
+}
+
+// 4. Trainers Table
+model Trainer {
+  id             String        @id @default(uuid())
+  user_id        String        @unique
+  user           User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  trainer_code   String        @unique // e.g. CFC-TRN-001
+  full_name      String
+  email          String        @unique
+  phone          String        @unique
+  gender         Gender
+  specialization String        // e.g. Strength & Conditioning, Hypertrophy, Zumba
+  experience_yrs Int           @default(1)
+  bio            String?
+  photo_url      String?
+  shift_timing   String?       // e.g. Morning 6-11 AM, Evening 5-10 PM
+  is_active      Boolean       @default(true)
+  created_at     DateTime      @default(now())
+  updated_at     DateTime      @updatedAt
+
+  workout_plans  WorkoutPlan[]
+  diet_plans     DietPlan[]
+  classes        GymClass[]
+  trainer_assignments TrainerAssignment[]
+  trainer_feedback   TrainerFeedback[]
+
+  @@index([trainer_code])
+  @@map("trainers")
+}
+
+// 5. Membership Plans Table
+model MembershipPlan {
+  id                 String         @id @default(uuid())
+  name               String         // e.g. Monthly, Quarterly, Half-Yearly, Annual
+  slug               String         @unique
+  duration_months    Int
+  duration_days      Int
+  price_inr          Decimal        @db.Decimal(10, 2)
+  admission_fee_inr  Decimal        @default(0.00) @db.Decimal(10, 2)
+  description        String?
+  features           String[]       // Array of feature bullet points
+  is_active          Boolean        @default(true)
+  sort_order         Int            @default(0)
+  created_at         DateTime       @default(now())
+  updated_at         DateTime       @updatedAt
+
+  memberships        Membership[]
+
+  @@map("membership_plans")
+}
+
+// 6. Memberships Table
+model Membership {
+  id              String            @id @default(uuid())
+  member_id       String
+  member          Member            @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  plan_id         String
+  plan            MembershipPlan    @relation(fields: [plan_id], references: [id], onDelete: Restrict)
+  start_date      DateTime
+  end_date        DateTime
+  status          MembershipStatus  @default(ACTIVE)
+  total_amount    Decimal           @db.Decimal(10, 2)
+  discount_amount Decimal           @default(0.00) @db.Decimal(10, 2)
+  paid_amount     Decimal           @default(0.00) @db.Decimal(10, 2)
+  notes           String?
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+
+  payments        Payment[]
+
+  @@index([member_id])
+  @@index([status])
+  @@index([end_date])
+  @@map("memberships")
+}
+
+// 7. Payments Table
+model Payment {
+  id              String         @id @default(uuid())
+  payment_number  String         @unique // e.g. CFC-PAY-2026-0001
+  member_id       String
+  member          Member         @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  membership_id   String?
+  membership      Membership?    @relation(fields: [membership_id], references: [id], onDelete: SetNull)
+  amount_inr      Decimal        @db.Decimal(10, 2)
+  payment_method  PaymentMethod
+  payment_status  PaymentStatus  @default(PAID)
+  transaction_ref String?        // UPI Ref, Bank UTR or Card Auth code
+  notes           String?
+  payment_date    DateTime       @default(now())
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+
+  receipt         Receipt?
+
+  @@index([payment_number])
+  @@index([member_id])
+  @@index([payment_date])
+  @@map("payments")
+}
+
+// 8. Receipts Table
+model Receipt {
+  id             String    @id @default(uuid())
+  receipt_number String    @unique // e.g. CFC-REC-2026-0001
+  payment_id     String    @unique
+  payment        Payment   @relation(fields: [payment_id], references: [id], onDelete: Cascade)
+  pdf_url        String?
+  issued_at      DateTime  @default(now())
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  @@index([receipt_number])
+  @@map("receipts")
+}
+
+// 9. Attendance Table
+model Attendance {
+  id          String            @id @default(uuid())
+  member_id   String
+  member      Member            @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  check_in    DateTime          @default(now())
+  check_out   DateTime?
+  date        DateTime          @db.Date
+  status      AttendanceStatus  @default(PRESENT)
+  source      String            @default("QR_SCANNER") // QR_SCANNER, MANUAL, CARD
+  created_at  DateTime          @default(now())
+  updated_at  DateTime          @updatedAt
+
+  @@unique([member_id, date]) // Prevent duplicate check-ins on same calendar day
+  @@index([member_id])
+  @@index([date])
+  @@map("attendance")
+}
+
+// 10. Workout Plans Table
+model WorkoutPlan {
+  id          String        @id @default(uuid())
+  member_id   String?
+  member      Member?       @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  trainer_id  String?
+  trainer     Trainer?      @relation(fields: [trainer_id], references: [id], onDelete: SetNull)
+  name        String        // e.g. Hypertrophy 5-Day Push/Pull/Legs
+  description String?
+  start_date  DateTime?     @default(now())
+  end_date    DateTime?
+  is_active   Boolean       @default(true)
+  is_default  Boolean       @default(false)
+  is_custom   Boolean       @default(false)
+  created_at  DateTime      @default(now())
+  updated_at  DateTime      @updatedAt
+
+  exercises        Exercise[]
+  workout_sessions WorkoutSession[]
+  workout_days     WorkoutDay[]
+  member_workouts  MemberWorkout[]
+
+  @@index([member_id])
+  @@map("workout_plans")
+}
+
+// 10b. Workout Days Table (Split Days within a Routine)
+model WorkoutDay {
+  id              String            @id @default(uuid())
+  workout_plan_id String
+  workout_plan    WorkoutPlan       @relation(fields: [workout_plan_id], references: [id], onDelete: Cascade)
+  day_name        String            // "Day 1 - Push", "Monday", etc.
+  day_number      Int               @default(1)
+  focus_muscle    String            // "Chest & Triceps"
+  created_at      DateTime          @default(now())
+
+  workout_exercises WorkoutExercise[]
+
+  @@index([workout_plan_id])
+  @@map("workout_days")
+}
+
+// 10c. Workout Exercises Table (Exercises assigned to Workout Days)
+model WorkoutExercise {
+  id              String      @id @default(uuid())
+  workout_day_id  String
+  workout_day     WorkoutDay  @relation(fields: [workout_day_id], references: [id], onDelete: Cascade)
+  exercise_name   String
+  muscle_group    String
+  target_sets     Int         @default(3)
+  target_reps     String      @default("10-12")
+  target_weight   Decimal?    @db.Decimal(6, 2)
+  rest_seconds    Int         @default(60)
+  instructions    String?     @db.Text
+  created_at      DateTime    @default(now())
+
+  @@index([workout_day_id])
+  @@map("workout_exercises")
+}
+
+// 10d. Member Workouts Table (Member's Active Routine Enrollment)
+model MemberWorkout {
+  id              String      @id @default(uuid())
+  member_id       String
+  member          Member      @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  workout_plan_id String
+  workout_plan    WorkoutPlan @relation(fields: [workout_plan_id], references: [id], onDelete: Cascade)
+  assigned_by     String      @default("TRAINER") // TRAINER, ADMIN, SELF
+  start_date      DateTime    @default(now())
+  end_date        DateTime?
+  is_active       Boolean     @default(true)
+  created_at      DateTime    @default(now())
+
+  @@index([member_id])
+  @@index([workout_plan_id])
+  @@map("member_workouts")
+}
+
+// 11. Exercises Table
+model Exercise {
+  id              String       @id @default(uuid())
+  workout_plan_id String
+  workout_plan    WorkoutPlan  @relation(fields: [workout_plan_id], references: [id], onDelete: Cascade)
+  day_of_week     String       // Monday, Tuesday, etc.
+  name            String       // Bench Press, Barbell Squat, etc.
+  target_muscle   String       // Chest, Legs, Back, Shoulders, Arms, Core
+  sets            Int          @default(3)
+  reps            String       // "8-12" or "15"
+  weight_kg       Decimal?     @db.Decimal(6, 2)
+  rest_seconds    Int          @default(60)
+  notes           String?
+  created_at      DateTime     @default(now())
+  updated_at      DateTime     @updatedAt
+
+  @@index([workout_plan_id])
+  @@map("exercises")
+}
+
+// 12. Diet Plans Table
+model DietPlan {
+  id          String      @id @default(uuid())
+  member_id   String
+  member      Member      @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  trainer_id  String?
+  trainer     Trainer?    @relation(fields: [trainer_id], references: [id], onDelete: SetNull)
+  name        String      // e.g. 2400 kcal High Protein Muscle Building
+  target_cals Int
+  protein_g   Int
+  carbs_g     Int
+  fats_g      Int
+  water_ltr   Decimal     @default(3.5) @db.Decimal(4, 2)
+  is_active   Boolean     @default(true)
+  created_at  DateTime    @default(now())
+  updated_at  DateTime    @updatedAt
+
+  items       DietItem[]
+
+  @@index([member_id])
+  @@map("diet_plans")
+}
+
+// 13. Diet Items Table
+model DietItem {
+  id           String    @id @default(uuid())
+  diet_plan_id String
+  diet_plan    DietPlan  @relation(fields: [diet_plan_id], references: [id], onDelete: Cascade)
+  meal_type    String    // Breakfast, Mid-Morning Snack, Lunch, Pre-Workout, Post-Workout, Dinner
+  time_slot    String    // 08:00 AM, 01:30 PM, etc.
+  food_name    String    // e.g. Oats with Almond Milk & Whey, Boiled Eggs, Paneer Bhurji
+  quantity     String    // 100g, 4 whites, 1 bowl
+  calories     Int
+  protein_g    Int
+  carbs_g      Int
+  fats_g       Int
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  @@index([diet_plan_id])
+  @@map("diet_items")
+}
+
+// 14. Enquiries CRM Table
+model Enquiry {
+  id              String      @id @default(uuid())
+  enquiry_code    String      @unique // e.g. CFC-ENQ-2026-0041
+  full_name       String
+  phone           String
+  email           String?
+  gender          Gender?
+  age             Int?
+  interested_plan String?     // Monthly, Quarterly, Annual, PT
+  fitness_goal    String?
+  source          String      @default("WEBSITE") // WEBSITE, WALK_IN, WHATSAPP, INSTAGRAM, REFERRAL
+  status          LeadStatus  @default(NEW)
+  follow_up_date  DateTime?
+  assigned_to     String?
+  notes           String?
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @updatedAt
+
+  @@index([enquiry_code])
+  @@index([phone])
+  @@index([status])
+  @@map("enquiries")
+}
+
+// 15. Notifications Table
+model Notification {
+  id         String           @id @default(uuid())
+  user_id    String
+  user       User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  title      String
+  message    String
+  type       NotificationType @default(INFO)
+  is_read    Boolean          @default(false)
+  link_url   String?
+  created_at DateTime         @default(now())
+
+  @@index([user_id])
+  @@index([is_read])
+  @@map("notifications")
+}
+
+// 16. Expenses Table
+model Expense {
+  id             String         @id @default(uuid())
+  title          String
+  category       String         // Rent, Electricity, Equipment, Maintenance, Salary, Marketing, Housekeeping, Other
+  amount_inr     Decimal        @db.Decimal(10, 2)
+  expense_date   DateTime       @db.Date
+  payment_method PaymentMethod  @default(UPI)
+  recipient      String?
+  receipt_url    String?
+  notes          String?
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+
+  @@index([category])
+  @@index([expense_date])
+  @@map("expenses")
+}
+
+// 17. Fitness Progress Table
+model FitnessProgress {
+  id             String    @id @default(uuid())
+  member_id      String
+  member         Member    @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  record_date    DateTime  @db.Date
+  weight_kg      Decimal   @db.Decimal(5, 2)
+  body_fat_pct   Decimal?  @db.Decimal(4, 2)
+  chest_cm       Decimal?  @db.Decimal(5, 2)
+  waist_cm       Decimal?  @db.Decimal(5, 2)
+  arms_cm        Decimal?  @db.Decimal(5, 2)
+  thighs_cm      Decimal?  @db.Decimal(5, 2)
+  notes          String?
+  created_at     DateTime  @default(now())
+
+  @@index([member_id])
+  @@index([record_date])
+  @@map("fitness_progress")
+}
+
+// 18. Gym Classes Table
+model GymClass {
+  id          String         @id @default(uuid())
+  title       String         // Zumba, Aerobics, Power Yoga, HIIT Circuit
+  trainer_id  String?
+  trainer     Trainer?       @relation(fields: [trainer_id], references: [id], onDelete: SetNull)
+  day_of_week String         // Monday, Wednesday, Friday
+  start_time  String         // "07:00 AM"
+  end_time    String         // "08:00 AM"
+  capacity    Int            @default(25)
+  is_active   Boolean        @default(true)
+  created_at  DateTime       @default(now())
+  updated_at  DateTime       @updatedAt
+
+  bookings    ClassBooking[]
+
+  @@map("gym_classes")
+}
+
+// 19. Class Bookings Table
+model ClassBooking {
+  id           String    @id @default(uuid())
+  class_id     String
+  class        GymClass  @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  member_id    String
+  member       Member    @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  booking_date DateTime  @db.Date
+  attended     Boolean   @default(false)
+  created_at   DateTime  @default(now())
+
+  @@unique([class_id, member_id, booking_date])
+  @@index([member_id])
+  @@map("class_bookings")
+}
+
+// 20. Testimonials Table
+model Testimonial {
+  id           String    @id @default(uuid())
+  client_name  String
+  achievement  String    // "-18 kg Fat Loss & 100kg Deadlift"
+  quote        String
+  rating       Int       @default(5)
+  avatar_url   String?
+  is_published Boolean   @default(true)
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  @@map("testimonials")
+}
+
+// 21. Gallery Images Table
+model GalleryImage {
+  id         String    @id @default(uuid())
+  title      String
+  category   String    // Interior, Equipment, Training, Activities, Events
+  image_url  String
+  caption    String?
+  sort_order Int       @default(0)
+  created_at DateTime  @default(now())
+
+  @@index([category])
+  @@map("gallery_images")
+}
+
+// 22. Gym Settings Table
+model GymSetting {
+  id            String   @id @default(uuid())
+  business_name String   @default("CORPUS FITNESS CLUB (CFC)")
+  tagline       String   @default("Transform Your Body. Transform Your Life.")
+  established   Int      @default(2019)
+  address       String   @default("3rd Floor, Above State Bank of India, Harshraj Colony – Vidyut Nagar Square, VMV Road, Amravati, Maharashtra 444604")
+  phone         String   @default("+91 76206 83995")
+  whatsapp      String   @default("+91 76206 83995")
+  instagram     String   @default("corpus_fitnessclub")
+  email         String   @default("info@corpusfitness.in")
+  upi_id        String   @default("corpusfitness@sbi")
+  gst_number    String?
+  morning_hours String   @default("6:00 AM – 11:00 AM")
+  evening_hours String   @default("5:00 PM – 10:00 PM")
+  currency      String   @default("INR")
+  updated_at    DateTime @updatedAt
+
+  @@map("gym_settings")
+}
+
+// 23. Audit Logs Table
+model AuditLog {
+  id          String   @id @default(uuid())
+  user_id     String?
+  user        User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  action      String   // MEMBER_CREATE, PAYMENT_RECORDED, PLAN_UPDATE, QR_CHECKIN, etc.
+  entity_type String   // Member, Payment, Membership, Attendance
+  entity_id   String?
+  details     Json?    // Structured payload diff
+  ip_address  String?
+  created_at  DateTime @default(now())
+
+  @@index([user_id])
+  @@index([action])
+  @@index([created_at])
+  @@map("audit_logs")
+}
+
+// 24. Trainer Assignments Table
+model TrainerAssignment {
+  id                    String    @id @default(uuid())
+  member_id             String
+  member                Member    @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  trainer_id            String?
+  trainer               Trainer?  @relation(fields: [trainer_id], references: [id], onDelete: SetNull)
+  assigned_date         DateTime  @default(now())
+  status                String    @default("active") // active, changed, removed
+  assigned_by           String    @default("ADMIN")
+  notes                 String?
+  previous_trainer_name String?
+  pt_package            String?
+  created_at            DateTime  @default(now())
+
+  @@index([member_id])
+  @@index([trainer_id])
+  @@index([status])
+  @@map("trainer_assignments")
+}
+
+// 25. Exercise Library Master Table
+model ExerciseLibraryItem {
+  id                   String   @id @default(uuid())
+  name                 String   @unique
+  muscle_group         String   // Chest, Back, Legs, Shoulders, Arms, Core, Full Body, Cardio
+  equipment            String   // Barbell, Dumbbell, Cable, Machine, Bodyweight
+  difficulty           String   @default("beginner") // beginner, intermediate, advanced
+  instructions         String   @db.Text
+  default_sets         Int      @default(3)
+  default_reps         String   @default("10-12")
+  default_rest_seconds Int      @default(60)
+  created_at           DateTime @default(now())
+
+  @@index([muscle_group])
+  @@map("exercise_library_items")
+}
+
+// 26. Workout Sessions Table (Live Logged Sessions)
+model WorkoutSession {
+  id               String       @id @default(uuid())
+  member_id        String
+  member           Member       @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  workout_plan_id  String?
+  workout_plan     WorkoutPlan? @relation(fields: [workout_plan_id], references: [id], onDelete: SetNull)
+  session_date     DateTime     @db.Date
+  start_time       String?
+  end_time         String?
+  duration_minutes Int          @default(45)
+  notes            String?
+  created_at       DateTime     @default(now())
+
+  sets             WorkoutSet[]
+
+  @@index([member_id])
+  @@index([session_date])
+  @@map("workout_sessions")
+}
+
+// 27. Workout Sets Table
+model WorkoutSet {
+  id                 String         @id @default(uuid())
+  workout_session_id String
+  workout_session    WorkoutSession @relation(fields: [workout_session_id], references: [id], onDelete: Cascade)
+  exercise_name      String
+  muscle_group       String
+  set_number         Int
+  reps               Int
+  weight_kg          Decimal        @db.Decimal(6, 2)
+  completed          Boolean        @default(true)
+  created_at         DateTime       @default(now())
+
+  @@index([workout_session_id])
+  @@index([exercise_name])
+  @@map("workout_sets")
+}
+
+// 28. Trainer Monthly Feedback & Reviews
+model TrainerFeedback {
+  id              String   @id @default(uuid())
+  member_id       String
+  member          Member   @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  trainer_id      String
+  trainer         Trainer  @relation(fields: [trainer_id], references: [id], onDelete: Cascade)
+  month           Int      // 1 - 12
+  year            Int      // e.g. 2026
+  rating          Int      @default(5) // 1 - 5 stars
+  feedback        String   @db.Text
+  focus_areas     String[]
+  recommendations String   @db.Text
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@unique([member_id, month, year])
+  @@index([member_id])
+  @@index([trainer_id])
+  @@map("trainer_feedbacks")
+}
+
+// 29. Monthly Fitness Reports Archive
+model MonthlyFitnessReport {
+  id                     String   @id @default(uuid())
+  member_id              String
+  month                  Int
+  year                   Int
+  has_trainer            Boolean  @default(false)
+  trainer_name           String?
+  total_attendance_days  Int      @default(0)
+  total_workouts         Int      @default(0)
+  total_duration_minutes Int      @default(0)
+  total_exercises        Int      @default(0)
+  total_sets             Int      @default(0)
+  total_volume_kg        Decimal  @default(0.00) @db.Decimal(10, 2)
+  report_json            Json     // Full aggregated report snapshot
+  created_at             DateTime @default(now())
+
+  @@unique([member_id, month, year])
+  @@index([member_id])
+  @@map("monthly_fitness_reports")
+}

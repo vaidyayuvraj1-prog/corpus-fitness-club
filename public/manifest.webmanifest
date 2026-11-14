@@ -1,0 +1,24 @@
+{
+  "name": "CORPUS FITNESS CLUB (CFC)",
+  "short_name": "Corpus Fitness",
+  "description": "Corpus Fitness Club (CFC) Amravati - Gym Management ERP & Member Portal",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#E50914",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

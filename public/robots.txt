@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /member/
+Disallow: /trainer/
+Disallow: /auth/
+
+Sitemap: https://corpusfitness.in/sitemap.xml

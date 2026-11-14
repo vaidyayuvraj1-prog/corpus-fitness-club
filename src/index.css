@@ -1,0 +1,126 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-white text-[#171717] antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #FFFFFF;
+    color: #171717;
+  }
+
+  /* Headings default to dark/black accent */
+  h1, h2, h3, h4, h5, h6 {
+    color: #111111;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #F1F5F9;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #E50914;
+  }
+}
+
+@layer components {
+  /* Primary Red CTA */
+  .btn-primary {
+    @apply inline-flex items-center justify-center font-bold py-3 px-6 rounded-lg text-white transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:pointer-events-none;
+    background-color: #E50914;
+  }
+  .btn-primary:hover {
+    background-color: #B91C1C;
+    box-shadow: 0 4px 12px rgba(229, 9, 20, 0.25);
+  }
+
+  /* Secondary Button */
+  .btn-secondary {
+    @apply inline-flex items-center justify-center font-bold py-3 px-6 rounded-lg text-white transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0;
+    background-color: #111111;
+  }
+  .btn-secondary:hover {
+    background-color: #000000;
+  }
+
+  /* Outline Button */
+  .btn-outline {
+    @apply inline-flex items-center justify-center border font-semibold py-2.5 px-5 rounded-lg text-[#171717] transition-all duration-200;
+    border-color: #E5E7EB;
+    background-color: #FFFFFF;
+  }
+  .btn-outline:hover {
+    border-color: #E50914;
+    color: #E50914;
+    background-color: #FEF2F2;
+  }
+
+  /* Outline Red Button */
+  .btn-outline-red {
+    @apply inline-flex items-center justify-center border-2 font-bold py-2.5 px-6 rounded-lg transition-all duration-200;
+    border-color: #E50914;
+    color: #E50914;
+    background-color: transparent;
+  }
+  .btn-outline-red:hover {
+    background-color: #E50914;
+    color: #FFFFFF;
+    box-shadow: 0 4px 12px rgba(229, 9, 20, 0.25);
+  }
+
+  /* Cards */
+  .card-white {
+    @apply bg-white border border-[#E5E7EB] rounded-xl p-6 shadow-sm;
+  }
+
+  .card-hover {
+    @apply bg-white border border-[#E5E7EB] rounded-xl p-6 shadow-sm hover:shadow-md hover:border-[#E50914]/40 transition-all duration-300;
+  }
+
+  /* Typography */
+  .section-title {
+    @apply text-3xl sm:text-4xl md:text-5xl font-display tracking-wider text-[#111111];
+  }
+
+  .section-subtitle {
+    @apply text-[#E50914] text-xs sm:text-sm font-bold tracking-widest uppercase;
+  }
+
+  /* Form inputs */
+  .input-field {
+    @apply bg-white border border-[#E5E7EB] text-[#171717] placeholder-gray-400 rounded-lg px-4 py-2.5 w-full focus:outline-none focus:border-[#E50914] focus:ring-1 focus:ring-[#E50914] transition-colors duration-200 text-sm;
+  }
+
+  .admin-sidebar-link {
+    @apply flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-[#666666] hover:text-[#111111] hover:bg-gray-100 transition-all duration-200 text-sm font-medium;
+  }
+
+  .admin-sidebar-link.active {
+    @apply text-[#E50914] bg-red-50 font-semibold border-l-4 border-[#E50914] rounded-l-none;
+  }
+
+  .stat-card {
+    @apply bg-white border border-[#E5E7EB] rounded-xl p-5 shadow-sm hover:shadow-md hover:border-[#E50914]/30 transition-all duration-300;
+  }
+}

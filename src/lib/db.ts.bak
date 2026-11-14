@@ -1,0 +1,1988 @@
+// Comprehensive resilient database and data management store for Corpus Fitness Club (CFC)
+import type {
+  Member,
+  Trainer,
+  MembershipPlan,
+  Membership,
+  Payment,
+  Attendance,
+  WorkoutPlan,
+  DietPlan,
+  Enquiry,
+  Expense,
+  FitnessProgress,
+  DashboardStats,
+  Profile,
+  NotificationItem,
+  MembershipRenewalLog,
+  ExerciseLibraryItem,
+  WorkoutSession,
+  WorkoutSetRecord,
+  TrainerAssignment,
+  TrainerFeedback,
+  MonthlyFitnessReportData,
+} from '@/types/database'
+import {
+  MEMBERSHIP_PLANS_DEFAULT,
+  TRAINERS_DEMO,
+  GALLERY_ITEMS_DEFAULT,
+  TESTIMONIALS_DEFAULT,
+} from './constants'
+import { format, subDays, subMonths, addMonths, addDays } from 'date-fns'
+
+// Storage Keys
+const KEYS = {
+  MEMBERS: 'cfc_db_members',
+  PLANS: 'cfc_db_plans',
+  MEMBERSHIPS: 'cfc_db_memberships',
+  PAYMENTS: 'cfc_db_payments',
+  ATTENDANCE: 'cfc_db_attendance',
+  TRAINERS: 'cfc_db_trainers',
+  WORKOUTS: 'cfc_db_workouts',
+  DIETS: 'cfc_db_diets',
+  ENQUIRIES: 'cfc_db_enquiries',
+  EXPENSES: 'cfc_db_expenses',
+  PROGRESS: 'cfc_db_progress',
+  GALLERY: 'cfc_db_gallery',
+  TESTIMONIALS: 'cfc_db_testimonials',
+  NOTIFICATIONS: 'cfc_db_notifications',
+  RENEWALS: 'cfc_db_renewals',
+  ASSIGNMENTS: 'cfc_db_trainer_assignments',
+  WORKOUT_SESSIONS: 'cfc_db_workout_sessions',
+  EXERCISE_LIBRARY: 'cfc_db_exercise_library',
+  TRAINER_FEEDBACK: 'cfc_db_trainer_feedback',
+}
+
+function getItem<T>(key: string, defaultVal: T): T {
+  try {
+    const val = localStorage.getItem(key)
+    return val ? JSON.parse(val) : defaultVal
+  } catch {
+    return defaultVal
+  }
+}
+
+function setItem<T>(key: string, val: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(val))
+  } catch (e) {
+    console.error('Storage write error:', e)
+  }
+}
+
+// ── Official Gym Email & Password Generators (@corpuss.com) ───────────────────
+export function generateCorpussEmail(fullName: string, role: 'member' | 'trainer' = 'member'): string {
+  const clean = fullName
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]/g, '.')
+    .replace(/\.+/g, '.')
+    .replace(/^\.|\.$/g, '') || (role === 'trainer' ? 'coach' : 'member')
+
+  const baseEmail = `${clean}@corpuss.com`
+
+  try {
+    const rawMembers = localStorage.getItem(KEYS.MEMBERS)
+    const members: Member[] = rawMembers ? JSON.parse(rawMembers) : []
+    const rawTrainers = localStorage.getItem(KEYS.TRAINERS)
+    const trainers: Trainer[] = rawTrainers ? JSON.parse(rawTrainers) : []
+
+    let candidate = baseEmail
+    let counter = 1
+
+    const isTaken = (email: string) => {
+      const e = email.toLowerCase()
+      const inMembers = members.some(
+        (m) => (m.email && m.email.toLowerCase() === e) || (m.profile?.email && m.profile.email.toLowerCase() === e)
+      )
+      const inTrainers = trainers.some(
+        (t) => (t.email && t.email.toLowerCase() === e) || (t.profile?.email && t.profile.email.toLowerCase() === e)
+      )
+      return inMembers || inTrainers
+    }
+
+    while (isTaken(candidate)) {
+      candidate = `${clean}${counter}@corpuss.com`
+      counter++
+    }
+
+    return candidate
+  } catch {
+    return baseEmail
+  }
+}
+
+export function generateCorpussPassword(prefix = 'CFC@'): string {
+  return `${prefix}${Math.floor(1000 + Math.random() * 9000)}`
+}
+
+// Initial Seed Data Generator
+function seedDatabase() {
+  const today = new Date()
+  const todayStr = format(today, 'yyyy-MM-dd')
+
+  // 1. Membership Plans
+  if (!localStorage.getItem(KEYS.PLANS)) {
+    const initialPlans: MembershipPlan[] = MEMBERSHIP_PLANS_DEFAULT.map((p) => ({
+      ...p,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    }))
+    setItem(KEYS.PLANS, initialPlans)
+  }
+
+  // 2. Trainers
+  if (!localStorage.getItem(KEYS.TRAINERS)) {
+    const initialTrainers: Trainer[] = TRAINERS_DEMO.map((t, idx) => ({
+      id: t.id,
+      profile_id: `profile-trainer-${idx + 1}`,
+      name: t.name,
+      phone: t.phone,
+      email: `${t.name.toLowerCase().replace(/\s+/g, '.')}@corpuss.com`,
+      password: 'CFC@TRN2026',
+      specialization: t.specialization,
+      experience: t.experience,
+      certifications: ['Certified Personal Trainer (CPT)', 'Sports Nutrition Specialist'],
+      bio: t.bio,
+      photo: t.photo,
+      is_active: true,
+      assigned_member_count: 8 + idx * 3,
+      created_at: new Date().toISOString(),
+      profile: {
+        id: `profile-trainer-${idx + 1}`,
+        full_name: t.name,
+        phone: t.phone,
+        email: `${t.name.toLowerCase().replace(/\s+/g, '.')}@corpuss.com`,
+        role: 'trainer',
+        avatar_url: t.photo,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    }))
+    setItem(KEYS.TRAINERS, initialTrainers)
+  }
+
+  // 3. Members
+  if (!localStorage.getItem(KEYS.MEMBERS)) {
+    const initialMembers: Member[] = [
+      {
+        id: 'mem-1',
+        profile_id: 'prof-1',
+        member_id: 'CFC-2026-0001',
+        gender: 'male',
+        date_of_birth: '1996-05-14',
+        address: 'Rukmini Nagar, VMV Road, Amravati',
+        emergency_contact: 'Suresh Sharma (Father)',
+        emergency_phone: '+91 94221 11223',
+        registration_date: '2025-06-10',
+        fitness_goal: 'Muscle Building & Hypertrophy',
+        status: 'active',
+        current_plan_id: 'ms-1',
+        photo_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+        email: 'rahul.sharma@corpuss.com',
+        password: 'CFC@2026',
+        notes: 'Consistent bench presser. Targeting 100kg PR.',
+        created_at: '2025-06-10T09:30:00Z',
+        updated_at: '2026-01-10T09:30:00Z',
+        profile: {
+          id: 'prof-1',
+          full_name: 'Rahul Sharma',
+          phone: '+91 94231 55667',
+          email: 'rahul.sharma@corpuss.com',
+          role: 'member',
+          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+          created_at: '2025-06-10T09:30:00Z',
+          updated_at: '2026-01-10T09:30:00Z',
+        },
+        current_plan: {
+          id: 'ms-1',
+          member_id: 'mem-1',
+          plan_id: 'annual',
+          start_date: '2025-06-10',
+          end_date: format(subDays(today, -180), 'yyyy-MM-dd'),
+          amount_paid: 5000,
+          payment_method: 'UPI',
+          status: 'active',
+          created_at: '2025-06-10T09:30:00Z',
+          plan: {
+            id: 'annual',
+            name: 'Yearly Plan',
+            duration_type: '12 Months',
+            duration_months: 12,
+            price_men: 5000,
+            price_women: 4000,
+            price: 5000,
+            description: '365 days unlimited gym access',
+            is_active: true,
+            created_at: '2025-01-01',
+          },
+        },
+      },
+      {
+        id: 'mem-2',
+        profile_id: 'prof-2',
+        member_id: 'CFC-2026-0002',
+        gender: 'female',
+        date_of_birth: '1998-09-22',
+        address: 'Harshraj Colony, Near SBI, VMV Road, Amravati',
+        emergency_contact: 'Dr. Vivek Deshmukh (Husband)',
+        emergency_phone: '+91 98223 34455',
+        registration_date: '2025-08-15',
+        fitness_goal: 'Weight Loss & Zumba',
+        status: 'active',
+        current_plan_id: 'ms-2',
+        photo_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80',
+        email: 'priya.deshmukh@corpuss.com',
+        password: 'CFC@2026',
+        notes: 'Attends morning 7:00 AM Zumba batch regularly.',
+        created_at: '2025-08-15T08:00:00Z',
+        updated_at: '2026-02-15T08:00:00Z',
+        profile: {
+          id: 'prof-2',
+          full_name: 'Priya Deshmukh',
+          phone: '+91 98901 23456',
+          email: 'priya.deshmukh@corpuss.com',
+          role: 'member',
+          avatar_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80',
+          created_at: '2025-08-15T08:00:00Z',
+          updated_at: '2026-02-15T08:00:00Z',
+        },
+        current_plan: {
+          id: 'ms-2',
+          member_id: 'mem-2',
+          plan_id: 'half-yearly',
+          start_date: '2025-08-15',
+          end_date: format(subDays(today, -60), 'yyyy-MM-dd'),
+          amount_paid: 2500,
+          payment_method: 'UPI',
+          status: 'active',
+          created_at: '2025-08-15T08:00:00Z',
+          plan: {
+            id: 'half-yearly',
+            name: 'Half-Yearly Plan',
+            duration_type: '6 Months',
+            duration_months: 6,
+            price_men: 3200,
+            price_women: 2500,
+            price: 2500,
+            description: 'Zumba and Aerobics included',
+            is_active: true,
+            created_at: '2025-01-01',
+          },
+        },
+      },
+      {
+        id: 'mem-3',
+        profile_id: 'prof-3',
+        member_id: 'CFC-2026-0003',
+        gender: 'male',
+        date_of_birth: '1994-11-03',
+        address: 'Gadge Nagar, Amravati',
+        emergency_contact: 'Ramesh Verma',
+        emergency_phone: '+91 94211 44556',
+        registration_date: '2025-10-01',
+        fitness_goal: 'Strength Training',
+        status: 'active',
+        current_plan_id: 'ms-3',
+        photo_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+        email: 'amit.verma@corpuss.com',
+        password: 'CFC@2026',
+        created_at: '2025-10-01T10:00:00Z',
+        updated_at: '2026-03-01T10:00:00Z',
+        profile: {
+          id: 'prof-3',
+          full_name: 'Amit Verma',
+          phone: '+91 97654 11223',
+          email: 'amit.verma@corpuss.com',
+          role: 'member',
+          avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+          created_at: '2025-10-01T10:00:00Z',
+          updated_at: '2026-03-01T10:00:00Z',
+        },
+        current_plan: {
+          id: 'ms-3',
+          member_id: 'mem-3',
+          plan_id: 'quarterly',
+          start_date: '2025-10-01',
+          end_date: format(subDays(today, -20), 'yyyy-MM-dd'),
+          amount_paid: 1800,
+          payment_method: 'Cash',
+          status: 'active',
+          created_at: '2025-10-01T10:00:00Z',
+          plan: {
+            id: 'quarterly',
+            name: 'Quarterly Plan',
+            duration_type: '3 Months',
+            duration_months: 3,
+            price_men: 1800,
+            price_women: 1400,
+            price: 1800,
+            description: '3 months full gym access',
+            is_active: true,
+            created_at: '2025-01-01',
+          },
+        },
+      },
+      {
+        id: 'mem-4',
+        profile_id: 'prof-4',
+        member_id: 'CFC-2026-0004',
+        gender: 'female',
+        date_of_birth: '2001-03-19',
+        address: 'Camp Road, Near Bus Stand, Amravati',
+        emergency_contact: 'Sunita Patil (Mother)',
+        emergency_phone: '+91 98811 77889',
+        registration_date: '2025-03-10',
+        fitness_goal: 'Cardio Fitness & Body Toning',
+        status: 'expired',
+        current_plan_id: 'ms-4',
+        photo_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+        email: 'neha.patil@corpuss.com',
+        password: 'CFC@2026',
+        created_at: '2025-03-10T11:00:00Z',
+        updated_at: '2025-09-10T11:00:00Z',
+        profile: {
+          id: 'prof-4',
+          full_name: 'Neha Patil',
+          phone: '+91 98234 56789',
+          email: 'neha.patil@corpuss.com',
+          role: 'member',
+          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+          created_at: '2025-03-10T11:00:00Z',
+          updated_at: '2025-09-10T11:00:00Z',
+        },
+        current_plan: {
+          id: 'ms-4',
+          member_id: 'mem-4',
+          plan_id: 'monthly',
+          start_date: '2025-03-10',
+          end_date: format(subDays(today, 12), 'yyyy-MM-dd'),
+          amount_paid: 500,
+          payment_method: 'Cash',
+          status: 'expired',
+          created_at: '2025-03-10T11:00:00Z',
+          plan: {
+            id: 'monthly',
+            name: 'Monthly Plan',
+            duration_type: '1 Month',
+            duration_months: 1,
+            price_men: 700,
+            price_women: 500,
+            price: 500,
+            description: '1 month basic access',
+            is_active: true,
+            created_at: '2025-01-01',
+          },
+        },
+      },
+      {
+        id: 'mem-5',
+        profile_id: 'prof-5',
+        member_id: 'CFC-2026-0005',
+        gender: 'male',
+        date_of_birth: '1992-07-28',
+        address: 'Sai Nagar, Amravati',
+        emergency_contact: 'Ajay Rathore (Brother)',
+        emergency_phone: '+91 94030 99887',
+        registration_date: '2025-11-01',
+        fitness_goal: 'Powerlifting & Strength',
+        status: 'active',
+        current_plan_id: 'ms-5',
+        photo_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
+        email: 'vikram.rathore@corpuss.com',
+        password: 'CFC@2026',
+        created_at: '2025-11-01T07:00:00Z',
+        updated_at: '2026-03-01T07:00:00Z',
+        profile: {
+          id: 'prof-5',
+          full_name: 'Vikram Rathore',
+          phone: '+91 99223 88776',
+          email: 'vikram.rathore@corpuss.com',
+          role: 'member',
+          avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
+          created_at: '2025-11-01T07:00:00Z',
+          updated_at: '2026-03-01T07:00:00Z',
+        },
+        current_plan: {
+          id: 'ms-5',
+          member_id: 'mem-5',
+          plan_id: 'half-yearly',
+          start_date: '2025-11-01',
+          end_date: format(subDays(today, -5), 'yyyy-MM-dd'),
+          amount_paid: 3200,
+          payment_method: 'UPI',
+          status: 'active',
+          created_at: '2025-11-01T07:00:00Z',
+          plan: {
+            id: 'half-yearly',
+            name: 'Half-Yearly Plan',
+            duration_type: '6 Months',
+            duration_months: 6,
+            price_men: 3200,
+            price_women: 2500,
+            price: 3200,
+            description: 'Half-yearly commitment',
+            is_active: true,
+            created_at: '2025-01-01',
+          },
+        },
+      },
+    ]
+    setItem(KEYS.MEMBERS, initialMembers)
+  }
+
+  // 4. Payments
+  if (!localStorage.getItem(KEYS.PAYMENTS)) {
+    const initialPayments: Payment[] = [
+      {
+        id: 'pay-1',
+        member_id: 'mem-1',
+        membership_id: 'ms-1',
+        amount: 5000,
+        total_amount: 5000,
+        pending_amount: 0,
+        payment_method: 'UPI',
+        transaction_ref: 'UPI/2026/091823901',
+        status: 'paid',
+        payment_date: todayStr,
+        receipt_number: 'CFC-REC-2026-0001',
+        notes: 'Annual Membership full payment received via PhonePe UPI',
+        recorded_by: 'CFC Reception',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'pay-2',
+        member_id: 'mem-2',
+        membership_id: 'ms-2',
+        amount: 2500,
+        total_amount: 2500,
+        pending_amount: 0,
+        payment_method: 'UPI',
+        transaction_ref: 'UPI/2026/087123491',
+        status: 'paid',
+        payment_date: todayStr,
+        receipt_number: 'CFC-REC-2026-0002',
+        notes: 'Half-Yearly Women Membership payment via GooglePay',
+        recorded_by: 'CFC Reception',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'pay-3',
+        member_id: 'mem-3',
+        membership_id: 'ms-3',
+        amount: 1500,
+        total_amount: 1800,
+        pending_amount: 300,
+        payment_method: 'Cash',
+        transaction_ref: null,
+        status: 'partial',
+        payment_date: format(subDays(today, 2), 'yyyy-MM-dd'),
+        receipt_number: 'CFC-REC-2026-0003',
+        notes: 'Partial payment ₹1500 in Cash, ₹300 pending by next Monday',
+        recorded_by: 'CFC Reception',
+        created_at: subDays(today, 2).toISOString(),
+      },
+      {
+        id: 'pay-4',
+        member_id: 'mem-5',
+        membership_id: 'ms-5',
+        amount: 3200,
+        total_amount: 3200,
+        pending_amount: 0,
+        payment_method: 'Bank Transfer',
+        transaction_ref: 'NEFT-SBI-99214',
+        status: 'paid',
+        payment_date: format(subDays(today, 5), 'yyyy-MM-dd'),
+        receipt_number: 'CFC-REC-2026-0004',
+        notes: 'Full payment through SBI Net Banking',
+        recorded_by: 'CFC Admin',
+        created_at: subDays(today, 5).toISOString(),
+      },
+    ]
+    setItem(KEYS.PAYMENTS, initialPayments)
+  }
+
+  // 5. Attendance
+  if (!localStorage.getItem(KEYS.ATTENDANCE)) {
+    const initialAttendance: Attendance[] = [
+      {
+        id: 'att-1',
+        member_id: 'mem-1',
+        check_in: `${todayStr}T06:35:12`,
+        check_out: `${todayStr}T08:05:00`,
+        method: 'qr',
+        recorded_by: 'Scanner Machine 1',
+      },
+      {
+        id: 'att-2',
+        member_id: 'mem-2',
+        check_in: `${todayStr}T07:05:44`,
+        check_out: `${todayStr}T08:20:10`,
+        method: 'qr',
+        recorded_by: 'Scanner Machine 1',
+      },
+      {
+        id: 'att-3',
+        member_id: 'mem-3',
+        check_in: `${todayStr}T07:45:00`,
+        check_out: null,
+        method: 'manual',
+        recorded_by: 'Reception Desk',
+      },
+      {
+        id: 'att-4',
+        member_id: 'mem-5',
+        check_in: `${todayStr}T06:15:30`,
+        check_out: `${todayStr}T07:45:00`,
+        method: 'qr',
+        recorded_by: 'Scanner Machine 1',
+      },
+    ]
+    setItem(KEYS.ATTENDANCE, initialAttendance)
+  }
+
+  // 6. Enquiries CRM
+  if (!localStorage.getItem(KEYS.ENQUIRIES)) {
+    const initialEnquiries: Enquiry[] = [
+      {
+        id: 'enq-1',
+        reference_no: 'CFC-ENQ-2026-0041',
+        full_name: 'Aniket Deshmukh',
+        phone: '+91 97654 99001',
+        email: 'aniket.d@gmail.com',
+        gender: 'male',
+        age: 24,
+        interested_plan: 'Half-Yearly Plan',
+        fitness_goal: 'Weight Loss & Muscle Gain',
+        message: 'Looking for morning 6:30 AM batch and personal trainer assistance.',
+        status: 'new',
+        lead_source: 'Website Enquiry Form',
+        follow_up_date: format(subDays(today, -1), 'yyyy-MM-dd'),
+        assigned_staff: 'Coach Rohit Deshmukh',
+        notes: 'Interested in gym + aerobics combo. Call tomorrow morning.',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'enq-2',
+        reference_no: 'CFC-ENQ-2026-0042',
+        full_name: 'Snehal Kulkarni',
+        phone: '+91 94228 11442',
+        email: 'snehal.kulkarni@yahoo.co.in',
+        gender: 'female',
+        age: 28,
+        interested_plan: 'Yearly Plan',
+        fitness_goal: 'Zumba & Aerobics Conditioning',
+        message: 'Visited gym last week with friend, wanted to confirm evening women batch timings.',
+        status: 'contacted',
+        lead_source: 'Walk-in Visit',
+        follow_up_date: format(subDays(today, -2), 'yyyy-MM-dd'),
+        assigned_staff: 'Priya Bhagat',
+        notes: 'Offered 10% annual bundle discount. Likely to join on Monday.',
+        created_at: subDays(today, 1).toISOString(),
+      },
+      {
+        id: 'enq-3',
+        reference_no: 'CFC-ENQ-2026-0043',
+        full_name: 'Gaurav Thakre',
+        phone: '+91 98900 22334',
+        email: 'gaurav.thakre@rediffmail.com',
+        gender: 'male',
+        age: 21,
+        interested_plan: 'Quarterly Plan',
+        fitness_goal: 'Powerlifting & Strength',
+        message: 'VMV College student, inquiry for student membership discount.',
+        status: 'interested',
+        lead_source: 'Instagram',
+        follow_up_date: format(subDays(today, -3), 'yyyy-MM-dd'),
+        assigned_staff: 'Coach Rohit Deshmukh',
+        notes: 'Informed about college ID concession. Will visit with college ID card.',
+        created_at: subDays(today, 3).toISOString(),
+      },
+    ]
+    setItem(KEYS.ENQUIRIES, initialEnquiries)
+  }
+
+  // 7. Expenses
+  if (!localStorage.getItem(KEYS.EXPENSES)) {
+    const initialExpenses: Expense[] = [
+      {
+        id: 'exp-1',
+        category: 'Rent',
+        amount: 25000,
+        expense_date: format(today, 'yyyy-MM-05'),
+        description: 'Monthly Premises Rent for 3rd Floor, SBI Building, VMV Road',
+        payment_method: 'Bank Transfer',
+        recorded_by: 'Super Admin',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'exp-2',
+        category: 'Electricity',
+        amount: 12400,
+        expense_date: format(today, 'yyyy-MM-08'),
+        description: 'MSEDCL Electricity bill payment for ACs and gym lighting',
+        payment_method: 'UPI',
+        recorded_by: 'Super Admin',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'exp-3',
+        category: 'Maintenance',
+        amount: 4200,
+        expense_date: format(today, 'yyyy-MM-10'),
+        description: 'Cable replacement and treadmill servicing & lubrication',
+        payment_method: 'Cash',
+        recorded_by: 'Head Trainer Rohit',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'exp-4',
+        category: 'Salary',
+        amount: 40000,
+        expense_date: format(today, 'yyyy-MM-01'),
+        description: 'Trainer and housekeeping staff monthly salaries',
+        payment_method: 'Bank Transfer',
+        recorded_by: 'Super Admin',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'exp-5',
+        category: 'Marketing',
+        amount: 5500,
+        expense_date: format(today, 'yyyy-MM-07'),
+        description: 'Local Amravati college flyer distribution and Instagram promotions',
+        payment_method: 'UPI',
+        recorded_by: 'Gym Admin',
+        created_at: new Date().toISOString(),
+      },
+    ]
+    setItem(KEYS.EXPENSES, initialExpenses)
+  }
+
+  // 8. Workout Plans
+  if (!localStorage.getItem(KEYS.WORKOUTS)) {
+    const initialWorkouts: WorkoutPlan[] = [
+      {
+        id: 'wp-1',
+        name: '4-Day Hypertrophy Muscle Builder',
+        category: 'Muscle Building',
+        level: 'intermediate',
+        description: 'Scientific push-pull-legs-arms routine optimized for muscle thickness and balanced symmetry.',
+        trainer_name: 'Coach Rohit Deshmukh',
+        is_active: true,
+        created_at: new Date().toISOString(),
+        exercises: [
+          {
+            id: 'ex-1',
+            plan_id: 'wp-1',
+            name: 'Barbell Flat Bench Press',
+            muscle_group: 'Chest',
+            sets: 4,
+            reps: '8 - 12',
+            weight: '60-80 kg',
+            rest_seconds: 90,
+            day_of_week: 'Monday',
+            instructions: 'Retract scapula, lower bar with control to mid-chest, drive through chest.',
+          },
+          {
+            id: 'ex-2',
+            plan_id: 'wp-1',
+            name: 'Incline Dumbbell Press',
+            muscle_group: 'Upper Chest',
+            sets: 3,
+            reps: '10 - 12',
+            weight: '22.5 kg',
+            rest_seconds: 60,
+            day_of_week: 'Monday',
+            instructions: '30-degree incline, full stretch at the bottom without flaring elbows.',
+          },
+          {
+            id: 'ex-3',
+            plan_id: 'wp-1',
+            name: 'Lat Pulldowns',
+            muscle_group: 'Back',
+            sets: 4,
+            reps: '10 - 12',
+            weight: '55 kg',
+            rest_seconds: 60,
+            day_of_week: 'Tuesday',
+            instructions: 'Wide grip, pull toward clavicle while leading with elbows.',
+          },
+          {
+            id: 'ex-4',
+            plan_id: 'wp-1',
+            name: 'Barbell Back Squat',
+            muscle_group: 'Legs',
+            sets: 4,
+            reps: '8 - 10',
+            weight: '80-100 kg',
+            rest_seconds: 120,
+            day_of_week: 'Wednesday',
+            instructions: 'Feet shoulder-width, break at hips and knees simultaneously to parallel.',
+          },
+          {
+            id: 'ex-5',
+            plan_id: 'wp-1',
+            name: 'Overhead Barbell Military Press',
+            muscle_group: 'Shoulders',
+            sets: 4,
+            reps: '8 - 10',
+            weight: '40 kg',
+            rest_seconds: 90,
+            day_of_week: 'Thursday',
+            instructions: 'Brace core glutes, press overhead vertically through full lockout.',
+          },
+        ],
+      },
+      {
+        id: 'wp-2',
+        name: 'High Intensity Fat-Loss Circuit',
+        category: 'Weight Loss',
+        level: 'beginner',
+        description: 'Full body metabolic resistance training combined with aerobic burst intervals.',
+        trainer_name: 'Priya Bhagat',
+        is_active: true,
+        created_at: new Date().toISOString(),
+        exercises: [
+          {
+            id: 'ex-6',
+            plan_id: 'wp-2',
+            name: 'Goblet Squat to Press',
+            muscle_group: 'Full Body',
+            sets: 3,
+            reps: '15',
+            weight: '12 kg',
+            rest_seconds: 45,
+            day_of_week: 'Monday',
+            instructions: 'Hold dumbbell at chest, squat deep and press directly overhead upon standing.',
+          },
+          {
+            id: 'ex-7',
+            plan_id: 'wp-2',
+            name: 'Mountain Climbers & Plank',
+            muscle_group: 'Core',
+            sets: 4,
+            reps: '45 seconds',
+            rest_seconds: 30,
+            day_of_week: 'Monday',
+            instructions: 'Keep hips low and drive knees alternately toward chest rapidly.',
+          },
+          {
+            id: 'ex-8',
+            plan_id: 'wp-2',
+            name: 'Treadmill Incline Sprints',
+            muscle_group: 'Cardio',
+            sets: 6,
+            reps: '1 min sprint / 1 min walk',
+            rest_seconds: 60,
+            day_of_week: 'Wednesday',
+            instructions: '8-10% incline at 10-12 km/h for maximum EPOC metabolic afterburn.',
+          },
+        ],
+      },
+    ]
+    setItem(KEYS.WORKOUTS, initialWorkouts)
+  }
+
+  // 9. Diet Plans
+  if (!localStorage.getItem(KEYS.DIETS)) {
+    const initialDiets: DietPlan[] = [
+      {
+        id: 'dp-1',
+        name: 'High-Protein Muscle Fuel (Indian Diet)',
+        goal: 'Muscle Gain & Strength',
+        total_calories: 2350,
+        protein_g: 145,
+        carbs_g: 260,
+        fats_g: 65,
+        water_liters: 4,
+        trainer_name: 'Amit Thakre',
+        is_active: true,
+        created_at: new Date().toISOString(),
+        meals: [
+          {
+            id: 'm-1',
+            diet_plan_id: 'dp-1',
+            meal_type: 'Breakfast',
+            food_item: 'Oats with Milk, Banana, Almonds & 3 Boiled Egg Whites',
+            quantity: '1 large bowl + 3 eggs',
+            calories: 520,
+            protein_g: 28,
+            carbs_g: 65,
+            fats_g: 12,
+            notes: 'Option: substitute eggs with 100g Paneer bhurji for vegetarians.',
+          },
+          {
+            id: 'm-2',
+            diet_plan_id: 'dp-1',
+            meal_type: 'Mid-Morning Snack',
+            food_item: 'Roasted Chana, Sprouts Salad with lemon, Green Tea',
+            quantity: '1 cup sprouts + 1 cup tea',
+            calories: 220,
+            protein_g: 14,
+            carbs_g: 32,
+            fats_g: 4,
+            notes: 'High fiber, aids digestion and sustained morning energy.',
+          },
+          {
+            id: 'm-3',
+            diet_plan_id: 'dp-1',
+            meal_type: 'Lunch',
+            food_item: 'Grilled Chicken Breast or Low-fat Paneer, 3 Chapati, Dal & Salad',
+            quantity: '150g protein source + 3 chapatis',
+            calories: 680,
+            protein_g: 45,
+            carbs_g: 75,
+            fats_g: 18,
+            notes: 'Use cold-pressed mustard or olive oil. Avoid deep-fried items.',
+          },
+          {
+            id: 'm-4',
+            diet_plan_id: 'dp-1',
+            meal_type: 'Evening Snack',
+            food_item: 'Peanut Butter Whole Wheat Toast & Whey Protein Shake / Sattu',
+            quantity: '2 slices + 1 scoop',
+            calories: 380,
+            protein_g: 30,
+            carbs_g: 35,
+            fats_g: 11,
+            notes: 'Consume 45 minutes before gym session.',
+          },
+          {
+            id: 'm-5',
+            diet_plan_id: 'dp-1',
+            meal_type: 'Dinner',
+            food_item: 'Steamed Brown Rice / Quinoa, Paneer / Fish Tikka, Mixed Veg Sabzi',
+            quantity: '1 bowl rice + 120g protein',
+            calories: 550,
+            protein_g: 28,
+            carbs_g: 53,
+            fats_g: 20,
+            notes: 'Eat at least 2 hours before bedtime.',
+          },
+        ],
+      },
+    ]
+    setItem(KEYS.DIETS, initialDiets)
+  }
+
+  // 10. Progress
+  if (!localStorage.getItem(KEYS.PROGRESS)) {
+    const initialProgress: FitnessProgress[] = [
+      {
+        id: 'prog-1',
+        member_id: 'mem-1',
+        recorded_date: format(subMonths(today, 3), 'yyyy-MM-dd'),
+        weight_kg: 84.5,
+        body_fat_pct: 22.5,
+        chest_cm: 101,
+        waist_cm: 92,
+        biceps_cm: 34,
+        notes: 'Initial baseline assessment at CFC.',
+      },
+      {
+        id: 'prog-2',
+        member_id: 'mem-1',
+        recorded_date: format(subMonths(today, 1), 'yyyy-MM-dd'),
+        weight_kg: 80.2,
+        body_fat_pct: 18.0,
+        chest_cm: 104,
+        waist_cm: 86,
+        biceps_cm: 36.5,
+        notes: 'Visible increase in upper chest fullness and waist reduction.',
+      },
+      {
+        id: 'prog-3',
+        member_id: 'mem-1',
+        recorded_date: todayStr,
+        weight_kg: 78.0,
+        body_fat_pct: 15.2,
+        chest_cm: 106,
+        waist_cm: 82,
+        biceps_cm: 38.0,
+        notes: 'Met 6-month goal! Increased bench press and visible abs.',
+      },
+    ]
+    setItem(KEYS.PROGRESS, initialProgress)
+  }
+
+  // 14. Notifications & Club Broadcasts (Admin to Members)
+  if (!localStorage.getItem(KEYS.NOTIFICATIONS)) {
+    const initialNotifications: NotificationItem[] = [
+      {
+        id: 'notif-1',
+        title: 'Sunday Deep Sanitization & Maintenance Notice',
+        message: 'Dear Members, Corpus Fitness Club Amravati facility will remain closed this Sunday as scheduled for floor sanitization, dumbbell rack realignment, and cable machine servicing. Regular hours resume Monday 6:00 AM sharp.',
+        type: 'warning',
+        priority: 'high',
+        target_audience: 'all',
+        sent_by: 'CFC Admin Office',
+        read: false,
+        is_read: false,
+        channels: ['in_app', 'whatsapp'],
+        created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+      },
+      {
+        id: 'notif-2',
+        title: 'Summer Shift Hours & Entry QR Reminder',
+        message: 'Reminder of club hours: Morning 6:00 AM – 11:00 AM & Evening 5:00 PM – 10:00 PM. Please scan your personal digital QR code at the reception counter before entering the workout area.',
+        type: 'info',
+        priority: 'normal',
+        target_audience: 'all',
+        sent_by: 'CFC Reception',
+        read: false,
+        is_read: false,
+        channels: ['in_app'],
+        created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+      },
+      {
+        id: 'notif-3',
+        title: '30-Day Body Transformation Challenge 2026',
+        message: 'Get ready for our annual fitness showdown! Free body composition assessment, certified trainer guidance, and cash prizes for top 3 transformations. Contact head trainer or front desk to sign up.',
+        type: 'success',
+        priority: 'high',
+        target_audience: 'active_members',
+        sent_by: 'Chief Trainer Vikram',
+        read: true,
+        is_read: true,
+        channels: ['in_app', 'whatsapp'],
+        created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+      },
+      {
+        id: 'notif-4',
+        title: 'New Heavy-Duty Olympic Bumper Plates Arrived',
+        message: 'We have upgraded our deadlift platforms on the 3rd floor with certified Olympic rubber bumper plates and competition collars for heavy lifters. Train hard, stay safe!',
+        type: 'info',
+        priority: 'normal',
+        target_audience: 'all',
+        sent_by: 'CFC Management',
+        read: true,
+        is_read: true,
+        channels: ['in_app'],
+        created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
+      },
+    ]
+    setItem(KEYS.NOTIFICATIONS, initialNotifications)
+  }
+
+  // 15. Membership Renewal Logs (Record of when customer renewed)
+  if (!localStorage.getItem(KEYS.RENEWALS)) {
+    const initialRenewals: MembershipRenewalLog[] = [
+      {
+        id: 'ren-1',
+        member_id: 'mem-1',
+        member_name: 'Rahul Sharma',
+        member_code: 'CFC-2026-0001',
+        renewal_date: '2026-01-10', // Date when customer renewed
+        previous_plan_name: 'Half-Yearly Plan',
+        previous_expiry_date: '2026-01-10',
+        renewed_plan_id: 'mp-3',
+        renewed_plan_name: 'Half-Yearly Plan (6 Months)',
+        new_start_date: '2026-01-10',
+        new_expiry_date: '2026-07-10',
+        amount_paid: 6000,
+        discount_amount: 500,
+        payment_method: 'UPI',
+        receipt_number: 'CFC-REC-2026-0001',
+        processed_by: 'Gym Admin (CFC)',
+        notes: 'Renewed with New Year 2026 special rate. Free body fat assessment.',
+        created_at: '2026-01-10T10:15:00Z',
+      },
+      {
+        id: 'ren-2',
+        member_id: 'mem-3',
+        member_name: 'Amit Deshmukh',
+        member_code: 'CFC-2026-0003',
+        renewal_date: '2026-02-01',
+        previous_plan_name: 'Quarterly Plan',
+        previous_expiry_date: '2026-02-01',
+        renewed_plan_id: 'mp-4',
+        renewed_plan_name: 'Annual Elite Fitness Plan',
+        new_start_date: '2026-02-01',
+        new_expiry_date: '2027-02-01',
+        amount_paid: 10000,
+        discount_amount: 1000,
+        payment_method: 'Cash',
+        receipt_number: 'CFC-REC-2026-0003',
+        processed_by: 'Reception Desk',
+        notes: 'Upgraded from Quarterly to Annual plan upon expiry.',
+        created_at: '2026-02-01T11:30:00Z',
+      },
+    ]
+    setItem(KEYS.RENEWALS, initialRenewals)
+  }
+
+  // 16. Auto-Migration: Ensure all members & trainers have valid @corpuss.com emails and passwords
+  try {
+    const rawMembers = localStorage.getItem(KEYS.MEMBERS)
+    if (rawMembers) {
+      const storedMembers: Member[] = JSON.parse(rawMembers)
+      let modified = false
+      const updated = storedMembers.map((m) => {
+        let email = (m.email || m.profile?.email || '').toLowerCase().trim()
+        const pass = m.password || 'CFC@2026'
+        if (!email.endsWith('@corpuss.com')) {
+          const namePart = (m.profile?.full_name || 'member')
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '.')
+            .replace(/\.+/g, '.')
+            .replace(/^\.|\.$/g, '')
+          email = `${namePart}@corpuss.com`
+          modified = true
+        }
+        if (!m.password) modified = true
+        if (!m.email || m.email !== email) modified = true
+
+        return {
+          ...m,
+          email,
+          password: pass,
+          profile: {
+            ...m.profile!,
+            email,
+          },
+        }
+      })
+      if (modified) {
+        setItem(KEYS.MEMBERS, updated)
+      }
+    }
+
+    const rawTrainers = localStorage.getItem(KEYS.TRAINERS)
+    if (rawTrainers) {
+      const storedTrainers: Trainer[] = JSON.parse(rawTrainers)
+      let modified = false
+      const updated = storedTrainers.map((t) => {
+        let email = (t.email || t.profile?.email || '').toLowerCase().trim()
+        const pass = t.password || 'CFC@TRN2026'
+        if (!email.endsWith('@corpuss.com')) {
+          const namePart = (t.name || 'coach')
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '.')
+            .replace(/\.+/g, '.')
+            .replace(/^\.|\.$/g, '')
+          email = `${namePart}@corpuss.com`
+          modified = true
+        }
+        if (!t.password) modified = true
+        if (!t.email || t.email !== email) modified = true
+
+        return {
+          ...t,
+          email,
+          password: pass,
+          profile: t.profile ? { ...t.profile, email } : undefined,
+        }
+      })
+      if (modified) {
+        setItem(KEYS.TRAINERS, updated)
+      }
+    }
+  } catch (err) {
+    console.error('Migration error:', err)
+  }
+}
+
+// Run seed immediately on module import
+seedDatabase()
+
+// ── Exported API Methods ──────────────────────────────────────────────────────
+
+export const db = {
+  // Members
+  getMembers(): Member[] {
+    return getItem<Member[]>(KEYS.MEMBERS, [])
+  },
+  getMemberById(id: string): Member | undefined {
+    return this.getMembers().find((m) => m.id === id || m.member_id === id)
+  },
+  saveMember(member: Partial<Member> & { full_name?: string; phone?: string; email?: string }): Member {
+    const members = this.getMembers()
+    const isEdit = !!member.id
+
+    // Ensure member has an official @corpuss.com email issued by Admin
+    const fullName = (member.full_name || member.profile?.full_name || 'Member').trim()
+    let targetEmail = (member.email || member.profile?.email || '').trim().toLowerCase()
+    if (!targetEmail || !targetEmail.endsWith('@corpuss.com')) {
+      targetEmail = generateCorpussEmail(fullName, 'member')
+    }
+
+    const assignedPassword = member.password || 'CFC@2026'
+
+    // STRICT UNIQUE EMAIL CHECK: One email can only be used once across the entire system!
+    if (targetEmail) {
+      const duplicateMember = members.find(
+        (m) =>
+          m.id !== member.id &&
+          (m.profile?.email?.trim().toLowerCase() === targetEmail || m.email?.trim().toLowerCase() === targetEmail)
+      )
+      if (duplicateMember) {
+        throw new Error(
+          `Email "${targetEmail}" is already registered with member ${duplicateMember.profile?.full_name} (${duplicateMember.member_id}). One email can only be used once!`
+        )
+      }
+
+      const trainers = this.getTrainers()
+      const duplicateTrainer = trainers.find(
+        (t) =>
+          t.email?.trim().toLowerCase() === targetEmail ||
+          t.profile?.email?.trim().toLowerCase() === targetEmail
+      )
+      if (duplicateTrainer) {
+        throw new Error(
+          `Email "${targetEmail}" is already registered with trainer ${duplicateTrainer.name}. One email can only be used once!`
+        )
+      }
+    }
+
+    if (isEdit) {
+      const idx = members.findIndex((m) => m.id === member.id)
+      if (idx !== -1) {
+        const existing = members[idx]
+        const updated: Member = {
+          ...existing,
+          ...member,
+          email: targetEmail,
+          password: member.password ?? existing.password ?? 'CFC@2026',
+          updated_at: new Date().toISOString(),
+          profile: {
+            ...existing.profile!,
+            full_name: member.full_name ?? existing.profile?.full_name ?? '',
+            phone: member.phone ?? existing.profile?.phone ?? '',
+            email: targetEmail,
+            updated_at: new Date().toISOString(),
+          },
+        }
+        members[idx] = updated
+        setItem(KEYS.MEMBERS, members)
+        return updated
+      }
+    }
+
+    // Create New
+    const newId = `mem-${Date.now()}`
+    const memberCode = `CFC-${new Date().getFullYear()}-${String(members.length + 1).padStart(4, '0')}`
+    const newMember: Member = {
+      id: newId,
+      profile_id: `prof-${Date.now()}`,
+      member_id: memberCode,
+      gender: member.gender || 'male',
+      date_of_birth: member.date_of_birth || '1998-01-01',
+      address: member.address || 'Amravati, Maharashtra',
+      emergency_contact: member.emergency_contact || 'Family Contact',
+      emergency_phone: member.emergency_phone || member.phone || '',
+      registration_date: member.registration_date || format(new Date(), 'yyyy-MM-dd'),
+      fitness_goal: member.fitness_goal || 'General Fitness',
+      status: member.status || 'active',
+      current_plan_id: null,
+      trainer_id: member.trainer_id || null,
+      trainer_name: member.trainer_name || null,
+      pt_status: member.pt_status || (member.trainer_id ? 'active_pt' : 'general_floor'),
+      pt_package: member.pt_package || null,
+      photo_url: member.photo_url || null,
+      email: targetEmail,
+      password: assignedPassword,
+      notes: member.notes || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      profile: {
+        id: `prof-${Date.now()}`,
+        full_name: fullName,
+        phone: member.phone || '+91 76206 83995',
+        email: targetEmail,
+        role: 'member',
+        avatar_url: member.photo_url || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    }
+
+    // If plan specified, create membership & payment
+    if (member.current_plan_id) {
+      const plans = this.getPlans()
+      const selectedPlan = plans.find((p) => p.id === member.current_plan_id)
+      if (selectedPlan) {
+        const start = new Date()
+        const end = new Date()
+        end.setMonth(end.getMonth() + selectedPlan.duration_months)
+
+        const msId = `ms-${Date.now()}`
+        const ms: Membership = {
+          id: msId,
+          member_id: newId,
+          plan_id: selectedPlan.id,
+          start_date: format(start, 'yyyy-MM-dd'),
+          end_date: format(end, 'yyyy-MM-dd'),
+          amount_paid: selectedPlan.price_men,
+          payment_method: 'UPI',
+          status: 'active',
+          created_at: new Date().toISOString(),
+          plan: selectedPlan,
+        }
+        newMember.current_plan_id = msId
+        newMember.current_plan = ms
+
+        // Add payment
+        this.savePayment({
+          member_id: newId,
+          membership_id: msId,
+          amount: selectedPlan.price_men,
+          total_amount: selectedPlan.price_men,
+          pending_amount: 0,
+          payment_method: 'UPI',
+          payment_date: format(new Date(), 'yyyy-MM-dd'),
+          status: 'paid',
+          notes: `Admission fee for ${selectedPlan.name}`,
+        })
+      }
+    }
+
+    members.unshift(newMember)
+    setItem(KEYS.MEMBERS, members)
+    return newMember
+  },
+  deleteMember(id: string): boolean {
+    let members = this.getMembers()
+    const lenBefore = members.length
+    members = members.filter((m) => m.id !== id && m.member_id !== id)
+    setItem(KEYS.MEMBERS, members)
+    return members.length < lenBefore
+  },
+
+  // Plans
+  getPlans(): MembershipPlan[] {
+    return getItem<MembershipPlan[]>(KEYS.PLANS, MEMBERSHIP_PLANS_DEFAULT as any)
+  },
+  savePlan(plan: Partial<MembershipPlan>): MembershipPlan {
+    const plans = this.getPlans()
+    if (plan.id) {
+      const idx = plans.findIndex((p) => p.id === plan.id)
+      if (idx !== -1) {
+        plans[idx] = { ...plans[idx], ...plan }
+        setItem(KEYS.PLANS, plans)
+        return plans[idx]
+      }
+    }
+    const newPlan: MembershipPlan = {
+      id: `plan-${Date.now()}`,
+      name: plan.name || 'New Plan',
+      duration_type: plan.duration_type || '1 Month',
+      duration_months: plan.duration_months || 1,
+      price_men: plan.price_men || 1000,
+      price_women: plan.price_women || 800,
+      price: plan.price_men || 1000,
+      description: plan.description || '',
+      features: plan.features || ['Full Gym Access'],
+      is_active: true,
+      created_at: new Date().toISOString(),
+    }
+    plans.push(newPlan)
+    setItem(KEYS.PLANS, plans)
+    return newPlan
+  },
+  deletePlan(id: string): void {
+    const plans = this.getPlans().filter((p) => p.id !== id)
+    setItem(KEYS.PLANS, plans)
+  },
+
+  // Payments & Receipts
+  getPayments(): Payment[] {
+    const payments = getItem<Payment[]>(KEYS.PAYMENTS, [])
+    const members = this.getMembers()
+    return payments.map((p) => ({
+      ...p,
+      member: members.find((m) => m.id === p.member_id),
+    }))
+  },
+  savePayment(payment: Partial<Payment>): Payment {
+    const payments = getItem<Payment[]>(KEYS.PAYMENTS, [])
+    const count = payments.length + 1
+    const receiptCode = `CFC-REC-${new Date().getFullYear()}-${String(count).padStart(4, '0')}`
+
+    const newPayment: Payment = {
+      id: payment.id || `pay-${Date.now()}`,
+      member_id: payment.member_id || '',
+      membership_id: payment.membership_id || null,
+      amount: payment.amount || 0,
+      total_amount: payment.total_amount || payment.amount || 0,
+      pending_amount: payment.pending_amount || 0,
+      discount_amount: payment.discount_amount || 0,
+      payment_method: payment.payment_method || 'UPI',
+      transaction_ref: payment.transaction_ref || null,
+      status: payment.status || 'paid',
+      payment_date: payment.payment_date || format(new Date(), 'yyyy-MM-dd'),
+      receipt_number: payment.receipt_number || receiptCode,
+      notes: payment.notes || null,
+      recorded_by: payment.recorded_by || 'CFC Staff',
+      created_at: new Date().toISOString(),
+    }
+
+    payments.unshift(newPayment)
+    setItem(KEYS.PAYMENTS, payments)
+    return newPayment
+  },
+  deletePayment(id: string): void {
+    const payments = getItem<Payment[]>(KEYS.PAYMENTS, []).filter((p) => p.id !== id)
+    setItem(KEYS.PAYMENTS, payments)
+  },
+
+  // Attendance
+  getAttendance(): Attendance[] {
+    const records = getItem<Attendance[]>(KEYS.ATTENDANCE, [])
+    const members = this.getMembers()
+    return records.map((a) => ({
+      ...a,
+      member: members.find((m) => m.id === a.member_id),
+    }))
+  },
+  checkDuplicateAttendance(memberId: string): boolean {
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    const records = getItem<Attendance[]>(KEYS.ATTENDANCE, [])
+    return records.some((a) => a.member_id === memberId && a.check_in.startsWith(todayStr))
+  },
+  markAttendance(memberId: string, method: 'qr' | 'manual', recordedBy = 'Self Scanner'): Attendance {
+    if (this.checkDuplicateAttendance(memberId)) {
+      throw new Error('Member already marked attendance today!')
+    }
+    const member = this.getMemberById(memberId)
+    if (!member) throw new Error('Member ID not found')
+
+    const newRecord: Attendance = {
+      id: `att-${Date.now()}`,
+      member_id: member.id,
+      check_in: new Date().toISOString(),
+      check_out: null,
+      method,
+      recorded_by: recordedBy,
+      member,
+    }
+
+    const records = getItem<Attendance[]>(KEYS.ATTENDANCE, [])
+    records.unshift(newRecord)
+    setItem(KEYS.ATTENDANCE, records)
+    return newRecord
+  },
+  checkOutAttendance(attendanceId: string): boolean {
+    const records = getItem<Attendance[]>(KEYS.ATTENDANCE, [])
+    const record = records.find((a) => a.id === attendanceId)
+    if (record) {
+      record.check_out = new Date().toISOString()
+      setItem(KEYS.ATTENDANCE, records)
+      return true
+    }
+    return false
+  },
+  deleteAttendance(attendanceId: string): void {
+    const records = getItem<Attendance[]>(KEYS.ATTENDANCE, []).filter((a) => a.id !== attendanceId)
+    setItem(KEYS.ATTENDANCE, records)
+  },
+
+  // Trainers
+  getTrainers(): Trainer[] {
+    return getItem<Trainer[]>(KEYS.TRAINERS, [])
+  },
+  saveTrainer(trainer: Partial<Trainer>): Trainer {
+    const trainers = this.getTrainers()
+
+    // Ensure trainer has an official @corpuss.com email
+    const coachName = (trainer.name || 'coach').trim()
+    let targetEmail = (trainer.email || trainer.profile?.email || '').trim().toLowerCase()
+    if (!targetEmail || !targetEmail.endsWith('@corpuss.com')) {
+      targetEmail = generateCorpussEmail(coachName, 'trainer')
+    }
+
+    const assignedPassword = trainer.password || 'CFC@TRN2026'
+
+    // STRICT UNIQUE EMAIL CHECK: One email can only be used once!
+    if (targetEmail) {
+      const duplicateTrainer = trainers.find(
+        (t) =>
+          t.id !== trainer.id &&
+          (t.email?.trim().toLowerCase() === targetEmail || t.profile?.email?.trim().toLowerCase() === targetEmail)
+      )
+      if (duplicateTrainer) {
+        throw new Error(
+          `Email "${targetEmail}" is already registered with trainer ${duplicateTrainer.name}. One email can only be used once!`
+        )
+      }
+
+      const members = this.getMembers()
+      const duplicateMember = members.find(
+        (m) =>
+          m.profile?.email?.trim().toLowerCase() === targetEmail ||
+          m.email?.trim().toLowerCase() === targetEmail
+      )
+      if (duplicateMember) {
+        throw new Error(
+          `Email "${targetEmail}" is already registered with member ${duplicateMember.profile?.full_name} (${duplicateMember.member_id}). One email can only be used once!`
+        )
+      }
+    }
+
+    if (trainer.id) {
+      const idx = trainers.findIndex((t) => t.id === trainer.id)
+      if (idx !== -1) {
+        trainers[idx] = {
+          ...trainers[idx],
+          ...trainer,
+          email: targetEmail,
+          password: trainer.password ?? trainers[idx].password ?? 'CFC@TRN2026',
+        }
+        setItem(KEYS.TRAINERS, trainers)
+        return trainers[idx]
+      }
+    }
+    const newTrainer: Trainer = {
+      id: `tr-${Date.now()}`,
+      profile_id: `prof-tr-${Date.now()}`,
+      name: trainer.name || 'New Coach',
+      phone: trainer.phone || '+91 76206 83995',
+      email: targetEmail,
+      password: assignedPassword,
+      specialization: trainer.specialization || 'Personal Fitness Coach',
+      experience: trainer.experience || '3+ Years',
+      certifications: trainer.certifications || ['Certified Fitness Trainer'],
+      bio: trainer.bio || 'Dedicated to helping members achieve their best self.',
+      photo: trainer.photo || 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?auto=format&fit=crop&w=400&q=80',
+      is_active: true,
+      assigned_member_count: 0,
+      created_at: new Date().toISOString(),
+    }
+    trainers.push(newTrainer)
+    setItem(KEYS.TRAINERS, trainers)
+    return newTrainer
+  },
+  deleteTrainer(id: string): void {
+    const trainers = this.getTrainers().filter((t) => t.id !== id)
+    setItem(KEYS.TRAINERS, trainers)
+  },
+  assignPTClient(
+    memberId: string,
+    trainerId: string | null,
+    trainerName?: string | null,
+    ptPackage?: string
+  ): Member | null {
+    const members = this.getMembers()
+    const idx = members.findIndex((m) => m.id === memberId || m.member_id === memberId)
+    if (idx === -1) return null
+
+    const updated: Member = {
+      ...members[idx],
+      trainer_id: trainerId,
+      trainer_name: trainerName || null,
+      pt_status: trainerId ? 'active_pt' : 'general_floor',
+      pt_package: ptPackage || (trainerId ? '1-on-1 Personal Training' : null),
+      updated_at: new Date().toISOString(),
+    }
+    members[idx] = updated
+    setItem(KEYS.MEMBERS, members)
+    return updated
+  },
+
+  // Enquiries
+  getEnquiries(): Enquiry[] {
+    return getItem<Enquiry[]>(KEYS.ENQUIRIES, [])
+  },
+  saveEnquiry(enquiry: Partial<Enquiry>): Enquiry {
+    const enquiries = this.getEnquiries()
+    if (enquiry.id) {
+      const idx = enquiries.findIndex((e) => e.id === enquiry.id)
+      if (idx !== -1) {
+        enquiries[idx] = { ...enquiries[idx], ...enquiry }
+        setItem(KEYS.ENQUIRIES, enquiries)
+        return enquiries[idx]
+      }
+    }
+    const refCode = `CFC-ENQ-${new Date().getFullYear()}-${String(enquiries.length + 1).padStart(4, '0')}`
+    const newEnquiry: Enquiry = {
+      id: `enq-${Date.now()}`,
+      reference_no: refCode,
+      full_name: enquiry.full_name || '',
+      phone: enquiry.phone || '',
+      email: enquiry.email || '',
+      gender: enquiry.gender || 'male',
+      age: enquiry.age || 25,
+      interested_plan: enquiry.interested_plan || 'Monthly Plan',
+      fitness_goal: enquiry.fitness_goal || 'General Fitness',
+      message: enquiry.message || '',
+      status: 'new',
+      lead_source: enquiry.lead_source || 'Website Admission Form',
+      assigned_staff: 'Head Coach Rohit',
+      follow_up_date: format(subDays(new Date(), -1), 'yyyy-MM-dd'),
+      notes: enquiry.notes || '',
+      created_at: new Date().toISOString(),
+    }
+    enquiries.unshift(newEnquiry)
+    setItem(KEYS.ENQUIRIES, enquiries)
+    return newEnquiry
+  },
+  // Check whether an email is already used anywhere in the system (Members or Trainers)
+  isEmailRegistered(
+    email: string,
+    excludeMemberId?: string,
+    excludeTrainerId?: string
+  ): { isRegistered: boolean; userType?: 'member' | 'trainer'; name?: string; memberId?: string } {
+    const cleanEmail = email.trim().toLowerCase()
+    if (!cleanEmail) return { isRegistered: false }
+
+    const members = this.getMembers()
+    const foundMember = members.find(
+      (m) =>
+        m.id !== excludeMemberId &&
+        (m.profile?.email?.trim().toLowerCase() === cleanEmail || m.email?.trim().toLowerCase() === cleanEmail)
+    )
+    if (foundMember) {
+      return {
+        isRegistered: true,
+        userType: 'member',
+        name: foundMember.profile?.full_name || 'Member',
+        memberId: foundMember.member_id,
+      }
+    }
+
+    const trainers = this.getTrainers()
+    const foundTrainer = trainers.find(
+      (t) =>
+        t.id !== excludeTrainerId &&
+        (t.email?.trim().toLowerCase() === cleanEmail || t.profile?.email?.trim().toLowerCase() === cleanEmail)
+    )
+    if (foundTrainer) {
+      return {
+        isRegistered: true,
+        userType: 'trainer',
+        name: foundTrainer.name,
+      }
+    }
+
+    return { isRegistered: false }
+  },
+
+  convertEnquiryToMember(enquiryId: string): Member | null {
+    const enquiries = this.getEnquiries()
+    const enq = enquiries.find((e) => e.id === enquiryId)
+    if (!enq) return null
+
+    // Generate official @corpuss.com email and password for the member
+    const officialEmail = generateCorpussEmail(enq.full_name, 'member')
+    const assignedPassword = generateCorpussPassword()
+
+    // Create member (which also saves and validates)
+    const newMember = this.saveMember({
+      full_name: enq.full_name,
+      phone: enq.phone,
+      email: officialEmail,
+      password: assignedPassword,
+      gender: enq.gender,
+      fitness_goal: enq.fitness_goal,
+      notes: `Converted from online enquiry ${enq.reference_no}. Original lead contact email: ${enq.email}`,
+    })
+
+    // Mark enquiry converted only after successful member creation
+    enq.status = 'converted'
+    setItem(KEYS.ENQUIRIES, enquiries)
+
+    return newMember
+  },
+  deleteEnquiry(id: string): void {
+    const enquiries = this.getEnquiries().filter((e) => e.id !== id)
+    setItem(KEYS.ENQUIRIES, enquiries)
+  },
+
+  // Expenses
+  getExpenses(): Expense[] {
+    return getItem<Expense[]>(KEYS.EXPENSES, [])
+  },
+  saveExpense(expense: Partial<Expense>): Expense {
+    const expenses = this.getExpenses()
+    const newExpense: Expense = {
+      id: expense.id || `exp-${Date.now()}`,
+      category: expense.category || 'Other',
+      amount: expense.amount || 0,
+      expense_date: expense.expense_date || format(new Date(), 'yyyy-MM-dd'),
+      description: expense.description || '',
+      payment_method: expense.payment_method || 'UPI',
+      recorded_by: expense.recorded_by || 'Admin',
+      created_at: new Date().toISOString(),
+    }
+    expenses.unshift(newExpense)
+    setItem(KEYS.EXPENSES, expenses)
+    return newExpense
+  },
+  deleteExpense(id: string): void {
+    let expenses = this.getExpenses()
+    expenses = expenses.filter((e) => e.id !== id)
+    setItem(KEYS.EXPENSES, expenses)
+  },
+
+  // Workouts & Diets
+  getWorkouts(): WorkoutPlan[] {
+    return getItem<WorkoutPlan[]>(KEYS.WORKOUTS, [])
+  },
+  saveWorkout(workout: Partial<WorkoutPlan>): WorkoutPlan {
+    const workouts = this.getWorkouts()
+    if (workout.id) {
+      const idx = workouts.findIndex((w) => w.id === workout.id)
+      if (idx !== -1) {
+        workouts[idx] = { ...workouts[idx], ...workout }
+        setItem(KEYS.WORKOUTS, workouts)
+        return workouts[idx]
+      }
+    }
+    const newWorkout: WorkoutPlan = {
+      id: `wp-${Date.now()}`,
+      name: workout.name || 'New Routine',
+      category: workout.category || 'General Fitness',
+      level: workout.level || 'beginner',
+      description: workout.description || '',
+      trainer_name: workout.trainer_name || 'Coach Rohit',
+      is_active: true,
+      exercises: workout.exercises || [],
+      created_at: new Date().toISOString(),
+    }
+    workouts.unshift(newWorkout)
+    setItem(KEYS.WORKOUTS, workouts)
+    return newWorkout
+  },
+  deleteWorkout(id: string): void {
+    const workouts = this.getWorkouts().filter((w) => w.id !== id)
+    setItem(KEYS.WORKOUTS, workouts)
+  },
+
+  getDiets(): DietPlan[] {
+    return getItem<DietPlan[]>(KEYS.DIETS, [])
+  },
+  saveDiet(diet: Partial<DietPlan>): DietPlan {
+    const diets = this.getDiets()
+    if (diet.id) {
+      const idx = diets.findIndex((d) => d.id === diet.id)
+      if (idx !== -1) {
+        diets[idx] = { ...diets[idx], ...diet }
+        setItem(KEYS.DIETS, diets)
+        return diets[idx]
+      }
+    }
+    const newDiet: DietPlan = {
+      id: `dp-${Date.now()}`,
+      name: diet.name || 'Custom Nutrition Plan',
+      goal: diet.goal || 'General Health',
+      total_calories: diet.total_calories || 2000,
+      protein_g: diet.protein_g || 120,
+      carbs_g: diet.carbs_g || 220,
+      fats_g: diet.fats_g || 55,
+      water_liters: diet.water_liters || 3.5,
+      trainer_name: diet.trainer_name || 'Coach Amit',
+      is_active: true,
+      meals: diet.meals || [],
+      created_at: new Date().toISOString(),
+    }
+    diets.unshift(newDiet)
+    setItem(KEYS.DIETS, diets)
+    return newDiet
+  },
+  deleteDiet(id: string): void {
+    const diets = this.getDiets().filter((d) => d.id !== id)
+    setItem(KEYS.DIETS, diets)
+  },
+
+  // Fitness Progress
+  getProgress(memberId: string): FitnessProgress[] {
+    const all = getItem<FitnessProgress[]>(KEYS.PROGRESS, [])
+    return all.filter((p) => p.member_id === memberId).sort((a, b) => new Date(a.recorded_date).getTime() - new Date(b.recorded_date).getTime())
+  },
+  saveProgress(prog: Partial<FitnessProgress>): FitnessProgress {
+    const all = getItem<FitnessProgress[]>(KEYS.PROGRESS, [])
+    const newProg: FitnessProgress = {
+      id: `prog-${Date.now()}`,
+      member_id: prog.member_id || '',
+      recorded_date: prog.recorded_date || format(new Date(), 'yyyy-MM-dd'),
+      weight_kg: prog.weight_kg || 75,
+      body_fat_pct: prog.body_fat_pct,
+      chest_cm: prog.chest_cm,
+      waist_cm: prog.waist_cm,
+      biceps_cm: prog.biceps_cm,
+      notes: prog.notes,
+    }
+    all.push(newProg)
+    setItem(KEYS.PROGRESS, all)
+    return newProg
+  },
+
+  // Dashboard Stats & Analytics
+  getDashboardStats(): DashboardStats {
+    const members = this.getMembers()
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    const monthStart = format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd')
+    const payments = this.getPayments()
+    const attendance = this.getAttendance()
+    const trainers = this.getTrainers()
+    const enquiries = this.getEnquiries()
+
+    const activeMembers = members.filter((m) => m.status === 'active').length
+    const expiredMembers = members.filter((m) => m.status === 'expired').length
+    const todayAttendance = attendance.filter((a) => a.check_in.startsWith(todayStr)).length
+
+    const monthlyPayments = payments.filter((p) => p.payment_date >= monthStart && p.status === 'paid')
+    const monthlyRevenue = monthlyPayments.reduce((sum, p) => sum + p.amount, 0)
+
+    const pendingPayments = payments.filter((p) => (p.pending_amount || 0) > 0 || p.status === 'pending').length
+    const newEnquiries = enquiries.filter((e) => e.status === 'new').length
+
+    return {
+      totalMembers: members.length,
+      activeMembers,
+      expiredMembers,
+      todayAttendance,
+      monthlyRevenue,
+      pendingPayments,
+      totalTrainers: trainers.length,
+      newEnquiries,
+    }
+  },
+
+  getMonthlyRevenue(months = 6) {
+    const today = new Date()
+    const results = []
+    const payments = this.getPayments()
+
+    for (let i = months - 1; i >= 0; i--) {
+      const d = subMonths(today, i)
+      const monthPrefix = format(d, 'yyyy-MM')
+      const total = payments
+        .filter((p) => p.payment_date.startsWith(monthPrefix) && (p.status === 'paid' || p.status === 'partial'))
+        .reduce((sum, p) => sum + p.amount, 0)
+
+      results.push({
+        month: format(d, 'MMM'),
+        revenue: total > 0 ? total : Math.floor(25000 + (months - i) * 8000), // realistic baseline
+      })
+    }
+    return results
+  },
+
+  getAttendanceTrends(days = 7) {
+    const today = new Date()
+    const results = []
+    const attendance = this.getAttendance()
+
+    for (let i = days - 1; i >= 0; i--) {
+      const d = subDays(today, i)
+      const dayStr = format(d, 'yyyy-MM-dd')
+      const count = attendance.filter((a) => a.check_in.startsWith(dayStr)).length
+
+      results.push({
+        day: format(d, 'EEE'),
+        date: format(d, 'dd MMM'),
+        count: count > 0 ? count : Math.floor(18 + Math.random() * 12),
+      })
+    }
+    return results
+  },
+
+  getPlanDistribution() {
+    const members = this.getMembers()
+    const counts: Record<string, number> = {}
+
+    members.forEach((m) => {
+      const planName = m.current_plan?.plan?.name || 'Half-Yearly Plan'
+      counts[planName] = (counts[planName] || 0) + 1
+    })
+
+    if (Object.keys(counts).length === 0) {
+      return [
+        { name: 'Half-Yearly', value: 45 },
+        { name: 'Yearly', value: 30 },
+        { name: 'Quarterly', value: 15 },
+        { name: 'Monthly', value: 10 },
+      ]
+    }
+
+    return Object.entries(counts).map(([name, value]) => ({ name, value }))
+  },
+
+  getWorkoutPlans(): WorkoutPlan[] {
+    return this.getWorkouts()
+  },
+
+  getDietPlans(): DietPlan[] {
+    return this.getDiets()
+  },
+
+  // Notifications & Broadcasts (Admin to Members)
+  getNotifications(): NotificationItem[] {
+    seedDatabase()
+    return getItem<NotificationItem[]>(KEYS.NOTIFICATIONS, [])
+  },
+
+  broadcastNotification(data: {
+    title: string
+    message: string
+    type?: 'info' | 'warning' | 'success' | 'alert'
+    priority?: 'normal' | 'high' | 'urgent'
+    target_audience?: 'all' | 'active_members' | 'trainers' | 'expired_members'
+    sent_by?: string
+    channels?: string[]
+  }): NotificationItem {
+    seedDatabase()
+    const list = this.getNotifications()
+    const newNotif: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      title: data.title.trim(),
+      message: data.message.trim(),
+      type: data.type || 'info',
+      priority: data.priority || 'normal',
+      target_audience: data.target_audience || 'all',
+      sent_by: data.sent_by || 'Gym Admin (CFC)',
+      channels: data.channels || ['in_app'],
+      read: false,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    }
+    const updated = [newNotif, ...list]
+    setItem(KEYS.NOTIFICATIONS, updated)
+    return newNotif
+  },
+
+  deleteNotification(id: string): void {
+    seedDatabase()
+    const list = this.getNotifications().filter((n) => n.id !== id)
+    setItem(KEYS.NOTIFICATIONS, list)
+  },
+
+  markNotificationRead(id: string): void {
+    seedDatabase()
+    const list = this.getNotifications().map((n) =>
+      n.id === id ? { ...n, read: true, is_read: true } : n
+    )
+    setItem(KEYS.NOTIFICATIONS, list)
+  },
+
+  markAllNotificationsRead(): void {
+    seedDatabase()
+    const list = this.getNotifications().map((n) => ({ ...n, read: true, is_read: true }))
+    setItem(KEYS.NOTIFICATIONS, list)
+  },
+
+  // Membership Renewals (Record when customer renewed)
+  getRenewals(): MembershipRenewalLog[] {
+    seedDatabase()
+    return getItem<MembershipRenewalLog[]>(KEYS.RENEWALS, [])
+  },
+
+  renewMember(params: {
+    member_id: string
+    plan_id: string
+    renewal_date: string // Exact date when customer renewed (YYYY-MM-DD)
+    new_start_date?: string
+    duration_months?: number
+    amount_paid: number
+    discount_amount?: number
+    payment_method: string
+    processed_by?: string
+    notes?: string
+  }): { member: Member; renewal: MembershipRenewalLog; payment: Payment } {
+    seedDatabase()
+    const member = this.getMemberById(params.member_id)
+    if (!member) throw new Error('Member not found')
+
+    const plans = this.getPlans()
+    const plan = plans.find((p) => p.id === params.plan_id) || plans[0]
+
+    const renewalDate = params.renewal_date || format(new Date(), 'yyyy-MM-dd')
+    const startDate = params.new_start_date || renewalDate
+    const months = params.duration_months || plan.duration_months || 1
+    const newEndDate = format(addMonths(new Date(startDate), months), 'yyyy-MM-dd')
+
+    // Generate receipt number
+    const payments = this.getPayments()
+    const nextReceiptNum = `CFC-REC-2026-${String(payments.length + 1).padStart(4, '0')}`
+
+    // 1. Create Renewal Log
+    const newRenewal: MembershipRenewalLog = {
+      id: `ren-${Date.now()}`,
+      member_id: member.id,
+      member_name: member.profile?.full_name || 'Member',
+      member_code: member.member_id,
+      renewal_date: renewalDate, // Exact date customer renewed!
+      previous_plan_name: member.current_plan?.plan?.name || 'Previous Plan',
+      previous_expiry_date: member.current_plan?.end_date || renewalDate,
+      renewed_plan_id: plan.id,
+      renewed_plan_name: plan.name,
+      new_start_date: startDate,
+      new_expiry_date: newEndDate,
+      amount_paid: params.amount_paid,
+      discount_amount: params.discount_amount || 0,
+      payment_method: params.payment_method || 'UPI',
+      receipt_number: nextReceiptNum,
+      processed_by: params.processed_by || 'Gym Admin (CFC)',
+      notes: params.notes || `Renewed on ${renewalDate} for ${plan.name}`,
+      created_at: new Date().toISOString(),
+    }
+
+    const currentRenewals = this.getRenewals()
+    setItem(KEYS.RENEWALS, [newRenewal, ...currentRenewals])
+
+    // 2. Record Payment in ledger
+    const paymentRecord: Payment = {
+      id: `pay-${Date.now()}`,
+      member_id: member.id,
+      membership_id: member.current_plan_id || null,
+      amount: params.amount_paid,
+      total_amount: params.amount_paid + (params.discount_amount || 0),
+      pending_amount: 0,
+      discount_amount: params.discount_amount || 0,
+      payment_method: (params.payment_method as any) || 'UPI',
+      status: 'paid',
+      payment_date: renewalDate,
+      receipt_number: nextReceiptNum,
+      transaction_ref: `REN-${Date.now().toString().slice(-6)}`,
+      notes: `Membership Renewal: ${plan.name} (Renewed on ${renewalDate})`,
+      created_at: new Date().toISOString(),
+      member,
+    }
+    this.savePayment(paymentRecord)
+
+    // 3. Update Member Status from expired to active, and set new plan
+    const updatedMember = this.saveMember({
+      id: member.id,
+      status: 'active', // Status flips from expired to active!
+      current_plan: {
+        id: member.current_plan?.id || `ms-${Date.now()}`,
+        member_id: member.id,
+        plan_id: plan.id,
+        start_date: startDate,
+        end_date: newEndDate,
+        amount_paid: params.amount_paid,
+        discount_amount: params.discount_amount || 0,
+        payment_method: params.payment_method,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        plan,
+      },
+    })
+
+    return {
+      member: updatedMember,
+      renewal: newRenewal,
+      payment: paymentRecord,
+    }
+  },
+
+  deleteRenewal(id: string): void {
+    seedDatabase()
+    const list = this.getRenewals().filter((r) => r.id !== id)
+    setItem(KEYS.RENEWALS, list)
+  },
+}
+
+export const getMembers = () => db.getMembers()
+export const getWorkoutPlans = () => db.getWorkouts()
+export const getDietPlans = () => db.getDiets()
+export const getPayments = () => db.getPayments()
+export const getAttendance = () => db.getAttendance()
+export const getMembershipPlans = () => db.getPlans()
+export const getEnquiries = () => db.getEnquiries()
+export const getExpenses = () => db.getExpenses()
+export const getTrainers = () => db.getTrainers()
+export const getNotifications = () => db.getNotifications()
+export const getRenewals = () => db.getRenewals()
+export default db
