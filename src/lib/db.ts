@@ -30,6 +30,7 @@ import {
   TESTIMONIALS_DEFAULT,
 } from './constants'
 import { format, subDays, subMonths, addMonths, addDays } from 'date-fns'
+import { supabase, isSupabaseConfigured } from './supabase'
 
 // Storage Keys
 const KEYS = {
@@ -76,6 +77,19 @@ function setItem<T>(key: string, val: T): void {
 // ── Multi-Device Real-Time Sync Engine ───────────────────────────────────────
 async function syncKeyToServer(key: string, value: any): Promise<void> {
   if (typeof window === 'undefined') return
+
+  // 1. Supabase Cloud Sync (Active when deployed on Vercel with Supabase credentials)
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase
+        .from('cfc_store')
+        .upsert({ key, data: value, updated_at: new Date().toISOString() })
+    } catch {
+      // Handled silently
+    }
+  }
+
+  // 2. Local Node/Vite Sync (Active during local WiFi network dev)
   try {
     await fetch('/api/db', {
       method: 'POST',
@@ -92,6 +106,33 @@ export async function syncDatabaseWithServer(): Promise<void> {
   if (isSyncing || typeof window === 'undefined') return
   isSyncing = true
   try {
+    // 1. Supabase Cloud Sync: Pull from cloud if credentials set
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.from('cfc_store').select('*')
+        if (!error && data && data.length > 0) {
+          let hasNewer = false
+          data.forEach((row: any) => {
+            if (row && row.key) {
+              const serverValStr = JSON.stringify(row.data)
+              const localValStr = localStorage.getItem(row.key)
+              if (serverValStr !== localValStr) {
+                localStorage.setItem(row.key, serverValStr)
+                hasNewer = true
+              }
+            }
+          })
+          if (hasNewer) {
+            window.dispatchEvent(new CustomEvent('cfc_db_synced'))
+          }
+          return
+        }
+      } catch {
+        // Fallback to local
+      }
+    }
+
+    // 2. Local Dev Server Sync (/api/db)
     const res = await fetch('/api/db', { cache: 'no-store' })
     if (res.ok) {
       const serverData = await res.json()
@@ -145,6 +186,21 @@ if (typeof window !== 'undefined') {
   syncDatabaseWithServer()
   setInterval(syncDatabaseWithServer, 3000)
   window.addEventListener('focus', syncDatabaseWithServer)
+
+  // Real-time Supabase Subscription
+  if (isSupabaseConfigured && supabase) {
+    try {
+      supabase
+        .channel('cfc_realtime_channel')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cfc_store' }, (payload: any) => {
+          if (payload?.new && payload.new.key) {
+            localStorage.setItem(payload.new.key, JSON.stringify(payload.new.data))
+            window.dispatchEvent(new CustomEvent('cfc_db_synced'))
+          }
+        })
+        .subscribe()
+    } catch {}
+  }
 }
 
 // ── Official Gym Email & Password Generators (@corpuss.com) ───────────────────
