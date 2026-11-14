@@ -233,6 +233,8 @@ export interface WorkoutSetRecord {
   reps: number
   weight_kg: number
   completed: boolean
+  target_reps?: string
+  target_weight?: string
 }
 
 export interface WorkoutSession {

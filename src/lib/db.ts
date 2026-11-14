@@ -3897,19 +3897,62 @@ export const db = {
   getWorkoutSessions(memberId?: string): WorkoutSession[] {
     seedDatabase()
     const list = getItem<WorkoutSession[]>(KEYS.WORKOUT_SESSIONS, [])
-    if (memberId) {
-      return list.filter((s) => s.member_id === memberId)
+
+    // Auto-heal any past concatenated range reps (e.g. 810 from "8-10", 1012 from "10-12")
+    let modified = false
+    const sanitized = list.map((sess) => {
+      let sessModified = false
+      const fixedSets = (sess.completed_sets || []).map((s) => {
+        let r = Number(s.reps) || 0
+        if (r === 810) {
+          r = 10
+          sessModified = true
+        } else if (r === 1012) {
+          r = 12
+          sessModified = true
+        } else if (r === 812) {
+          r = 12
+          sessModified = true
+        } else if (r === 1215) {
+          r = 15
+          sessModified = true
+        }
+        return { ...s, reps: r }
+      })
+      if (sessModified) {
+        modified = true
+        return { ...sess, completed_sets: fixedSets }
+      }
+      return sess
+    })
+
+    if (modified) {
+      setItem(KEYS.WORKOUT_SESSIONS, sanitized)
     }
-    return list
+
+    if (memberId) {
+      return sanitized.filter((s) => s.member_id === memberId)
+    }
+    return sanitized
   },
 
   saveWorkoutSession(session: Partial<WorkoutSession>): WorkoutSession {
     seedDatabase()
     const sessions = this.getWorkoutSessions()
+
+    const sanitizedSets = (session.completed_sets || []).map((s) => {
+      let r = Number(s.reps) || 0
+      if (r === 810) r = 10
+      else if (r === 1012) r = 12
+      else if (r === 812) r = 12
+      else if (r === 1215) r = 15
+      return { ...s, reps: r }
+    })
+
     if (session.id) {
       const idx = sessions.findIndex((s) => s.id === session.id)
       if (idx !== -1) {
-        sessions[idx] = { ...sessions[idx], ...session }
+        sessions[idx] = { ...sessions[idx], ...session, completed_sets: sanitizedSets }
         setItem(KEYS.WORKOUT_SESSIONS, sessions)
         return sessions[idx]
       }
@@ -3928,7 +3971,7 @@ export const db = {
       notes: session.notes || '',
       trainer_id: session.trainer_id || member?.trainer_id || null,
       trainer_name: session.trainer_name || member?.trainer_name || null,
-      completed_sets: session.completed_sets || [],
+      completed_sets: sanitizedSets,
       created_at: new Date().toISOString(),
     }
     sessions.unshift(newSession)

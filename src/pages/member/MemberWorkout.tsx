@@ -186,8 +186,22 @@ export default function MemberWorkout() {
 
     exercises.forEach((ex) => {
       const numSets = Number(ex.sets) || 3
-      const defaultWeightNum = parseFloat((ex.weight || '20').replace(/[^0-9.]/g, '')) || 20
-      const defaultRepsNum = parseInt((ex.reps || '10').replace(/[^0-9]/g, '')) || 10
+
+      // Safe numeric weight extraction (handles "60-80 kg" -> 60, "25 kg" -> 25)
+      const weightMatch = String(ex.weight || '20').match(/\d+(?:\.\d+)?/)
+      const defaultWeightNum = weightMatch ? parseFloat(weightMatch[0]) : 20
+
+      // Safe numeric reps extraction:
+      // Handles ranges like "8-10", "8 - 10", "10-12", "12-15" cleanly WITHOUT concatenating into 810 or 1012!
+      const defaultRepsNum = (() => {
+        const str = String(ex.reps || '10').trim()
+        const nums = str.match(/\d+/g)
+        if (!nums || nums.length === 0) return 10
+        if (nums.length === 1) return parseInt(nums[0], 10) || 10
+        // For range like "8-10", default to upper target (10) or lower target (8)
+        // Taking upper target e.g. 10 gives realistic single set rep count instead of 810!
+        return parseInt(nums[1] || nums[0], 10) || 10
+      })()
 
       const setsArr = []
       for (let s = 1; s <= numSets; s++) {
@@ -314,16 +328,19 @@ export default function MemberWorkout() {
     liveSets.forEach((group) => {
       group.sets.forEach((s) => {
         if (s.completed) {
+          const safeReps = s.actual_reps === 810 ? 10 : (s.actual_reps === 1012 ? 12 : (s.actual_reps === 812 ? 12 : s.actual_reps))
           recordedSets.push({
             id: `set-${Date.now()}-${Math.random()}`,
             exercise_name: group.exercise_name,
             muscle_group: group.muscle_group,
             set_number: s.set_number,
-            reps: s.actual_reps,
+            reps: safeReps,
             weight_kg: s.actual_weight,
             completed: true,
+            target_reps: s.target_reps,
+            target_weight: s.target_weight,
           })
-          totalVolume += s.actual_weight * s.actual_reps
+          totalVolume += s.actual_weight * safeReps
         }
       })
     })
@@ -332,16 +349,19 @@ export default function MemberWorkout() {
     if (recordedSets.length === 0) {
       liveSets.forEach((group) => {
         group.sets.forEach((s) => {
+          const safeReps = s.actual_reps === 810 ? 10 : (s.actual_reps === 1012 ? 12 : (s.actual_reps === 812 ? 12 : s.actual_reps))
           recordedSets.push({
             id: `set-${Date.now()}-${Math.random()}`,
             exercise_name: group.exercise_name,
             muscle_group: group.muscle_group,
             set_number: s.set_number,
-            reps: s.actual_reps,
+            reps: safeReps,
             weight_kg: s.actual_weight,
             completed: true,
+            target_reps: s.target_reps,
+            target_weight: s.target_weight,
           })
-          totalVolume += s.actual_weight * s.actual_reps
+          totalVolume += s.actual_weight * safeReps
         })
       })
       toast.success('Auto-completed all sets for your logged session!')
@@ -1558,14 +1578,22 @@ export default function MemberWorkout() {
 
                     {/* Sets Preview Pills */}
                     <div className="flex flex-wrap gap-2 text-xs">
-                      {ws.completed_sets.map((s, idx) => (
-                        <span
-                          key={idx}
-                          className="px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-700 text-[11px] font-mono"
-                        >
-                          <strong>{s.exercise_name}:</strong> {s.weight_kg}kg × {s.reps}
-                        </span>
-                      ))}
+                      {ws.completed_sets.map((s, idx) => {
+                        const displayReps = s.reps === 810 ? 10 : (s.reps === 1012 ? 12 : (s.reps === 812 ? 12 : s.reps))
+                        return (
+                          <span
+                            key={idx}
+                            className="px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-700 text-[11px] font-mono"
+                          >
+                            <strong>{s.exercise_name}:</strong> {s.weight_kg}kg × {displayReps} reps
+                            {s.target_reps && s.target_reps !== String(displayReps) && (
+                              <span className="text-gray-400 font-sans text-[10px] ml-1">
+                                (Target: {s.target_reps})
+                              </span>
+                            )}
+                          </span>
+                        )
+                      })}
                     </div>
                   </div>
                 )
