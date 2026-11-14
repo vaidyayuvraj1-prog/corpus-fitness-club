@@ -109,8 +109,14 @@ export default function MemberLayout() {
                 className="flex items-center gap-2 group p-1 rounded-lg hover:bg-gray-100 transition-colors"
                 title="Account Profile & Password Settings"
               >
-                <div className="w-8 h-8 rounded-full bg-red-100 text-[#E50914] font-bold text-xs flex items-center justify-center group-hover:scale-105 transition-transform">
-                  {profile?.full_name ? profile.full_name[0] : 'M'}
+                <div className="w-8 h-8 rounded-full bg-red-100 text-[#E50914] font-bold text-xs flex items-center justify-center group-hover:scale-105 transition-transform overflow-hidden border border-red-200">
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="DP" className="w-full h-full object-cover" />
+                  ) : profile?.full_name ? (
+                    profile.full_name[0].toUpperCase()
+                  ) : (
+                    'M'
+                  )}
                 </div>
                 <span className="hidden sm:inline-block text-xs font-bold text-[#111111] group-hover:text-[#E50914] transition-colors">
                   {profile?.full_name || 'Member'}

@@ -110,8 +110,14 @@ export default function AdminLayout() {
 
             {/* User Profile Badge */}
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-red-100 text-[#E50914] font-bold text-xs flex items-center justify-center">
-                {profile?.full_name ? profile.full_name[0] : 'A'}
+              <div className="w-8 h-8 rounded-full bg-red-100 text-[#E50914] font-bold text-xs flex items-center justify-center overflow-hidden border border-red-200">
+                {profile?.avatar_url ? (
+                  <img src={profile.avatar_url} alt="DP" className="w-full h-full object-cover" />
+                ) : profile?.full_name ? (
+                  profile.full_name[0].toUpperCase()
+                ) : (
+                  'A'
+                )}
               </div>
               <div className="hidden md:block text-left">
                 <p className="text-xs font-bold text-[#111111] leading-none">

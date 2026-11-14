@@ -1,12 +1,28 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { User, Phone, Mail, MapPin, Target, Camera, Lock, Eye, EyeOff, Save, ShieldAlert, Award } from 'lucide-react';
+import {
+  User,
+  Phone,
+  Mail,
+  MapPin,
+  Target,
+  Camera,
+  Lock,
+  Eye,
+  EyeOff,
+  Save,
+  ShieldAlert,
+  Award,
+  Upload,
+  RefreshCw,
+} from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { db, getMembers } from '@/lib/db';
+import { processImageFile } from '@/lib/imageUpload';
 import type { Member } from '@/types/database';
 
 const profileSchema = z.object({
@@ -35,10 +51,22 @@ export default function MemberProfile() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Look up full member record from DB
   const allMembers: Member[] = getMembers();
   const memberRecord = allMembers.find((m: Member) => m.profile_id === profile?.id || m.profile?.email === profile?.email) || allMembers[0];
+
+  const [currentAvatar, setCurrentAvatar] = useState(
+    memberRecord?.photo_url || profile?.avatar_url || ''
+  );
+
+  useEffect(() => {
+    if (memberRecord?.photo_url || profile?.avatar_url) {
+      setCurrentAvatar(memberRecord?.photo_url || profile?.avatar_url || '');
+    }
+  }, [memberRecord?.photo_url, profile?.avatar_url]);
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ProfileForm>({
     resolver: zodResolver(profileSchema),
@@ -56,6 +84,45 @@ export default function MemberProfile() {
     resolver: zodResolver(passwordSchema),
   });
 
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingPhoto(true);
+    const toastId = toast.loading('Reading & compressing photo from device...');
+
+    try {
+      // Compress client-side directly from phone/laptop gallery without links
+      const base64 = await processImageFile(file, {
+        maxWidth: 450,
+        maxHeight: 450,
+        quality: 0.85,
+      });
+
+      // 1. Update Auth Store
+      if (updateProfile) {
+        await updateProfile({ avatar_url: base64 });
+      }
+
+      // 2. Update Member Record in Database & Supabase Sync
+      if (memberRecord?.id) {
+        db.saveMember({
+          id: memberRecord.id,
+          photo_url: base64,
+        });
+      }
+
+      setCurrentAvatar(base64);
+      window.dispatchEvent(new CustomEvent('cfc_db_synced'));
+      toast.success('Profile picture (DP) updated successfully!', { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update profile picture', { id: toastId });
+    } finally {
+      setIsUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const onProfileSubmit = async (data: ProfileForm) => {
     try {
       if (updateProfile) {
@@ -63,6 +130,16 @@ export default function MemberProfile() {
           full_name: data.full_name,
           phone: data.phone,
           email: data.email,
+        });
+      }
+      if (memberRecord?.id) {
+        db.saveMember({
+          id: memberRecord.id,
+          full_name: data.full_name,
+          phone: data.phone,
+          address: data.address,
+          emergency_phone: data.emergency_contact,
+          fitness_goal: data.fitness_goal,
         });
       }
       toast.success('Member profile updated successfully!');
@@ -101,30 +178,50 @@ export default function MemberProfile() {
           Member Profile & Account Settings
         </h1>
         <p className="text-xs text-gray-500 mt-1">
-          Manage your personal details, emergency contact, fitness goals, and portal security credentials.
+          Manage your personal details, profile picture, emergency contact, fitness goals, and portal security credentials.
         </p>
       </div>
 
-      {/* Top Banner Card */}
+      {/* Top Banner Card with DP Changer */}
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-2xl p-6 border border-[#E5E7EB] shadow-sm flex flex-col sm:flex-row items-center gap-6"
       >
-        <div className="relative group">
-          <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center text-2xl font-black bg-red-50 text-[#E50914] border-2 border-[#E50914]">
-            {memberRecord?.photo_url ? (
-              <img src={memberRecord.photo_url} alt="Profile" className="w-full h-full object-cover" />
+        {/* Hidden Native File Input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleAvatarChange}
+        />
+
+        {/* Circular Avatar with Camera Hover Overlay */}
+        <div className="relative group shrink-0">
+          <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center text-2xl font-black bg-red-50 text-[#E50914] border-2 border-[#E50914] shadow-sm">
+            {currentAvatar ? (
+              <img src={currentAvatar} alt="Profile DP" className="w-full h-full object-cover" />
             ) : (
               initials
             )}
           </div>
+
           <button
-            onClick={() => toast('Photo upload is available via Admin Front Desk', { icon: '📷' })}
-            className="absolute inset-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white cursor-pointer"
-            title="Update Photo"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploadingPhoto}
+            className="absolute inset-0 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/65 text-white cursor-pointer"
+            title="Upload DP from Device Gallery"
           >
-            <Camera className="w-6 h-6" />
+            {isUploadingPhoto ? (
+              <RefreshCw className="w-6 h-6 animate-spin" />
+            ) : (
+              <>
+                <Camera className="w-6 h-6" />
+                <span className="text-[10px] font-bold mt-1 uppercase">Change DP</span>
+              </>
+            )}
           </button>
         </div>
 
@@ -136,12 +233,23 @@ export default function MemberProfile() {
             </span>
           </div>
           <p className="text-xs text-gray-500 mt-0.5">{profile?.email || 'member@corpusfitness.in'}</p>
-          <div className="mt-3 flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs text-gray-600">
+
+          <div className="mt-3 flex flex-wrap items-center justify-center sm:justify-start gap-3 text-xs text-gray-600">
             <span className="inline-flex items-center gap-1 font-mono font-semibold text-[#E50914] bg-red-50 px-2 py-0.5 rounded">
               <Award className="w-3.5 h-3.5" /> ID: {memberRecord?.member_id || 'CFC-2026-0001'}
             </span>
             <span>Joined: {memberRecord?.registration_date || '15 Jan 2026'}</span>
-            <span>Blood Group: O+</span>
+
+            {/* Direct Device Gallery DP Button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingPhoto}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 text-[11px] font-bold border border-gray-300 transition-colors cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5 text-[#E50914]" />
+              {isUploadingPhoto ? 'Uploading DP...' : '📁 Change DP (Device Gallery)'}
+            </button>
           </div>
         </div>
       </motion.div>
@@ -251,7 +359,7 @@ export default function MemberProfile() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-[#E50914] hover:bg-[#B91C1C] text-white text-xs font-bold transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-[#E50914] hover:bg-[#B91C1C] text-white text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer shadow-sm"
               >
                 <Save className="w-4 h-4" /> {isSubmitting ? 'Saving Changes...' : 'Save Profile Changes'}
               </button>
@@ -362,7 +470,7 @@ export default function MemberProfile() {
                 <button
                   type="submit"
                   disabled={pwdSubmitting}
-                  className="w-full py-2.5 rounded-lg border border-[#E50914] text-[#E50914] hover:bg-red-50 text-xs font-bold transition-colors disabled:opacity-50"
+                  className="w-full py-2.5 rounded-lg border border-[#E50914] text-[#E50914] hover:bg-red-50 text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   {pwdSubmitting ? 'Updating...' : 'Update Password'}
                 </button>

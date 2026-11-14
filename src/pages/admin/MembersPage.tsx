@@ -29,10 +29,13 @@ import {
   Lock,
   ShieldCheck,
   EyeOff,
+  Upload,
+  Camera,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { QRCodeSVG as QRCode } from 'qrcode.react'
 import { db, generateCorpussEmail, generateCorpussPassword } from '@/lib/db'
+import { processImageFile } from '@/lib/imageUpload'
 import type { Member, MembershipPlan } from '@/types/database'
 import { FITNESS_GOALS, GYM_INFO } from '@/lib/constants'
 import { format } from 'date-fns'
@@ -82,6 +85,32 @@ export default function MembersPage() {
     status: 'active' as const,
     photo_url: '',
   })
+
+  const memberPhotoInputRef = useRef<HTMLInputElement>(null)
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false)
+
+  const handleMemberPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsProcessingPhoto(true)
+    const toastId = toast.loading('Reading & compressing member photo...')
+
+    try {
+      const compressed = await processImageFile(file, {
+        maxWidth: 400,
+        maxHeight: 400,
+        quality: 0.85,
+      })
+      setFormData((prev) => ({ ...prev, photo_url: compressed }))
+      toast.success('Member photo loaded from device gallery!', { id: toastId })
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to process image', { id: toastId })
+    } finally {
+      setIsProcessingPhoto(false)
+      if (memberPhotoInputRef.current) memberPhotoInputRef.current.value = ''
+    }
+  }
 
   useEffect(() => {
     loadData()
@@ -601,6 +630,65 @@ export default function MembersPage() {
               </div>
 
               <form onSubmit={handleSaveMember} className="space-y-4">
+                {/* Photo Upload from Device Gallery */}
+                <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <input
+                    ref={memberPhotoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleMemberPhotoUpload}
+                  />
+
+                  <div className="relative group shrink-0">
+                    <div className="w-16 h-16 rounded-full overflow-hidden bg-red-50 border-2 border-[#E50914] flex items-center justify-center shadow-xs">
+                      {formData.photo_url ? (
+                        <img src={formData.photo_url} alt="Member" className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-8 h-8 text-gray-400" />
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => memberPhotoInputRef.current?.click()}
+                      disabled={isProcessingPhoto}
+                      className="absolute inset-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white cursor-pointer"
+                      title="Upload Photo"
+                    >
+                      <Camera className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-gray-800 uppercase tracking-wide">
+                      Member Photograph (Gallery / Camera)
+                    </p>
+                    <p className="text-[10px] text-gray-500">
+                      Pick photo directly from device gallery — prints on official member ID card.
+                    </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => memberPhotoInputRef.current?.click()}
+                        disabled={isProcessingPhoto}
+                        className="px-3 py-1.5 bg-white hover:bg-gray-100 border border-gray-300 rounded-lg text-[11px] font-bold text-gray-800 inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-[#E50914]" />
+                        {isProcessingPhoto ? 'Compressing...' : '📁 Choose from Gallery'}
+                      </button>
+                      {formData.photo_url && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData((prev) => ({ ...prev, photo_url: '' }))}
+                          className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-[11px] font-bold cursor-pointer"
+                        >
+                          Remove Photo
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Full Name *</label>

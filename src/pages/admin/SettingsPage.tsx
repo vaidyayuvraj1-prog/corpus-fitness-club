@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import {
   Settings,
   Building,
@@ -15,12 +15,46 @@ import {
   Key,
   Download,
   Upload,
+  Camera,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { GYM_INFO } from '@/lib/constants'
 import { db } from '@/lib/db'
+import { useAuth } from '@/hooks/useAuth'
+import { processImageFile } from '@/lib/imageUpload'
 
 export default function SettingsPage() {
+  const { profile, updateProfile } = useAuth()
+  const adminDpInputRef = useRef<HTMLInputElement>(null)
+  const [isUploadingAdminDp, setIsUploadingAdminDp] = useState(false)
+
+  const handleAdminDpUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploadingAdminDp(true)
+    const toastId = toast.loading('Reading & compressing admin photo...')
+
+    try {
+      const base64 = await processImageFile(file, {
+        maxWidth: 400,
+        maxHeight: 400,
+        quality: 0.85,
+      })
+
+      if (updateProfile) {
+        await updateProfile({ avatar_url: base64 })
+      }
+      window.dispatchEvent(new CustomEvent('cfc_db_synced'))
+      toast.success('Admin DP updated successfully!', { id: toastId })
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update photo', { id: toastId })
+    } finally {
+      setIsUploadingAdminDp(false)
+      if (adminDpInputRef.current) adminDpInputRef.current.value = ''
+    }
+  }
+
   const [gymSettings, setGymSettings] = useState({
     name: GYM_INFO.name,
     established: GYM_INFO.established,
@@ -240,6 +274,61 @@ export default function SettingsPage() {
 
         {/* Right: Security, Admin Password & Audit Trail */}
         <div className="lg:col-span-4 space-y-6">
+          {/* Admin Profile & DP Card */}
+          <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm">
+            <h3 className="font-bold text-base text-[#111111] mb-1 flex items-center gap-2">
+              <Camera className="h-5 w-5 text-[#E50914]" /> Director / Admin DP
+            </h3>
+            <p className="text-xs text-gray-400 mb-4">
+              Change administrator profile picture from device gallery — no links required
+            </p>
+
+            <input
+              ref={adminDpInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAdminDpUpload}
+            />
+
+            <div className="flex items-center gap-4">
+              <div className="relative group shrink-0">
+                <div className="w-16 h-16 rounded-full overflow-hidden bg-red-50 border-2 border-[#E50914] flex items-center justify-center font-bold text-lg text-[#E50914]">
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="Admin DP" className="w-full h-full object-cover" />
+                  ) : profile?.full_name ? (
+                    profile.full_name[0].toUpperCase()
+                  ) : (
+                    'A'
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => adminDpInputRef.current?.click()}
+                  disabled={isUploadingAdminDp}
+                  className="absolute inset-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white cursor-pointer"
+                  title="Upload from Gallery"
+                >
+                  <Camera className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1">
+                <p className="text-xs font-bold text-[#111111]">{profile?.full_name || 'Corpus Club Director'}</p>
+                <p className="text-[10px] text-gray-400">{profile?.email || 'yuvraj@corpuss.com'}</p>
+                <button
+                  type="button"
+                  onClick={() => adminDpInputRef.current?.click()}
+                  disabled={isUploadingAdminDp}
+                  className="mt-2 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 text-[11px] font-bold rounded-lg inline-flex items-center gap-1.5 cursor-pointer border border-gray-300 transition-colors"
+                >
+                  <Upload className="w-3.5 h-3.5 text-[#E50914]" />
+                  {isUploadingAdminDp ? 'Uploading...' : '📁 Change DP (Device Gallery)'}
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Admin Master Password Card */}
           <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm">
             <h3 className="font-bold text-base text-[#111111] mb-1 flex items-center gap-2">

@@ -1649,6 +1649,11 @@ function seedDatabase() {
     setItem(KEYS.PLANS, initialPlans)
   }
 
+  // 1b. Gallery Items (Gym Interior, Equipment, Training)
+  if (!localStorage.getItem(KEYS.GALLERY)) {
+    setItem(KEYS.GALLERY, GALLERY_ITEMS_DEFAULT)
+  }
+
   // 2. Trainers
   if (!localStorage.getItem(KEYS.TRAINERS)) {
     const initialTrainers: Trainer[] = TRAINERS_DEMO.map((t, idx) => ({
@@ -4262,9 +4267,38 @@ export const db = {
     }
   },
 
+  // ── Gallery Management ────────────────────────────────────────────────────
+  getGallery(): any[] {
+    seedDatabase()
+    return getItem<any[]>(KEYS.GALLERY, GALLERY_ITEMS_DEFAULT)
+  },
+
+  saveGalleryItem(item: { title: string; category: string; image: string; id?: string }): any[] {
+    const list = this.getGallery()
+    const newItem = {
+      id: item.id || `img-${Date.now()}`,
+      title: item.title,
+      category: item.category,
+      image: item.image,
+      created_at: new Date().toISOString(),
+    }
+    const updated = [newItem, ...list]
+    setItem(KEYS.GALLERY, updated)
+    return updated
+  },
+
+  deleteGalleryItem(id: string): any[] {
+    const list = this.getGallery().filter((i) => i.id !== id)
+    setItem(KEYS.GALLERY, list)
+    return list
+  },
+
 }
 
 export const getMembers = () => db.getMembers()
+export const getGallery = () => db.getGallery()
+export const saveGalleryItem = (item: any) => db.saveGalleryItem(item)
+export const deleteGalleryItem = (id: string) => db.deleteGalleryItem(id)
 export const getWorkoutPlans = () => db.getWorkouts()
 export const getDietPlans = () => db.getDiets()
 export const getPayments = () => db.getPayments()

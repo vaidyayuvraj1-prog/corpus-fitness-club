@@ -1,13 +1,25 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, ZoomIn } from 'lucide-react'
-import { GALLERY_CATEGORIES, GALLERY_ITEMS_DEFAULT } from '@/lib/constants'
+import { GALLERY_CATEGORIES } from '@/lib/constants'
+import { db } from '@/lib/db'
 
 export default function GalleryPage() {
   const [activeCategory, setActiveCategory] = useState('All')
   const [selectedImage, setSelectedImage] = useState<any | null>(null)
+  const [items, setItems] = useState<any[]>(() => db.getGallery())
 
-  const items = GALLERY_ITEMS_DEFAULT
+  // Listen for realtime sync from admin uploads
+  useEffect(() => {
+    const handleSync = () => setItems(db.getGallery())
+    window.addEventListener('cfc_db_synced', handleSync)
+    window.addEventListener('storage', handleSync)
+    return () => {
+      window.removeEventListener('cfc_db_synced', handleSync)
+      window.removeEventListener('storage', handleSync)
+    }
+  }, [])
+
   const filtered =
     activeCategory === 'All' ? items : items.filter((item) => item.category === activeCategory)
 
@@ -32,7 +44,7 @@ export default function GalleryPage() {
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
-                className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                   activeCategory === cat
                     ? 'bg-[#E50914] text-white shadow-md shadow-red-500/20'
                     : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'
@@ -53,7 +65,7 @@ export default function GalleryPage() {
               <div
                 key={item.id}
                 onClick={() => setSelectedImage(item)}
-                className="group relative h-72 rounded-2xl overflow-hidden border border-gray-200 shadow-sm cursor-pointer"
+                className="group relative h-72 rounded-2xl overflow-hidden border border-gray-200 shadow-sm cursor-pointer bg-gray-100"
               >
                 <img
                   src={item.image}
@@ -76,6 +88,12 @@ export default function GalleryPage() {
               </div>
             ))}
           </div>
+
+          {filtered.length === 0 && (
+            <div className="py-20 text-center text-gray-400">
+              <p className="text-base font-bold">No photographs found in this category.</p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -95,7 +113,7 @@ export default function GalleryPage() {
             >
               <button
                 onClick={() => setSelectedImage(null)}
-                className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black transition-colors"
+                className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black transition-colors cursor-pointer"
               >
                 <X className="h-6 w-6" />
               </button>
