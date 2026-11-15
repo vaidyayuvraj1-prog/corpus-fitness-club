@@ -37,8 +37,13 @@ export default function MemberLayout() {
   const { profile, logout } = useAuth()
 
   useEffect(() => {
-    const notifs = db.getNotifications()
-    setUnreadNotifs(notifs.filter((n) => !n.is_read && !n.read).length)
+    const updateCount = () => {
+      const notifs = db.getNotifications()
+      setUnreadNotifs(notifs.filter((n) => !n.is_read && !n.read).length)
+    }
+    updateCount()
+    window.addEventListener('cfc_db_synced', updateCount)
+    return () => window.removeEventListener('cfc_db_synced', updateCount)
   }, [])
 
   const handleLogout = async () => {

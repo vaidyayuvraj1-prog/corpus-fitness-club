@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Settings,
   Building,
@@ -27,6 +27,19 @@ export default function SettingsPage() {
   const { profile, updateProfile } = useAuth()
   const adminDpInputRef = useRef<HTMLInputElement>(null)
   const [isUploadingAdminDp, setIsUploadingAdminDp] = useState(false)
+  const [adminName, setAdminName] = useState(profile?.full_name || 'Yuvraj (Club Director)')
+  const [adminEmail, setAdminEmail] = useState(profile?.email || 'yuvraj@corpuss.com')
+  const [adminPhone, setAdminPhone] = useState(profile?.phone || '+91 76206 83995')
+  const [isSavingAdminProfile, setIsSavingAdminProfile] = useState(false)
+
+  // Sync state when profile loads or updates
+  useEffect(() => {
+    if (profile) {
+      if (profile.full_name) setAdminName(profile.full_name)
+      if (profile.email) setAdminEmail(profile.email)
+      if (profile.phone) setAdminPhone(profile.phone)
+    }
+  }, [profile])
 
   const handleAdminDpUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -45,6 +58,7 @@ export default function SettingsPage() {
       if (updateProfile) {
         await updateProfile({ avatar_url: base64 })
       }
+      db.saveAdminProfile({ avatar_url: base64 })
       window.dispatchEvent(new CustomEvent('cfc_db_synced'))
       toast.success('Admin DP updated successfully!', { id: toastId })
     } catch (err: any) {
@@ -52,6 +66,33 @@ export default function SettingsPage() {
     } finally {
       setIsUploadingAdminDp(false)
       if (adminDpInputRef.current) adminDpInputRef.current.value = ''
+    }
+  }
+
+  const handleSaveAdminProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!adminName.trim()) {
+      toast.error('Admin name is required')
+      return
+    }
+    setIsSavingAdminProfile(true)
+    const toastId = toast.loading('Saving admin director profile...')
+    try {
+      const updates = {
+        full_name: adminName.trim(),
+        email: adminEmail.trim(),
+        phone: adminPhone.trim(),
+      }
+      db.saveAdminProfile(updates)
+      if (updateProfile) {
+        await updateProfile(updates)
+      }
+      window.dispatchEvent(new CustomEvent('cfc_db_synced'))
+      toast.success('Admin profile saved permanently across all devices!', { id: toastId })
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save admin profile', { id: toastId })
+    } finally {
+      setIsSavingAdminProfile(false)
     }
   }
 
@@ -276,11 +317,16 @@ export default function SettingsPage() {
         <div className="lg:col-span-4 space-y-6">
           {/* Admin Profile & DP Card */}
           <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-sm">
-            <h3 className="font-bold text-base text-[#111111] mb-1 flex items-center gap-2">
-              <Camera className="h-5 w-5 text-[#E50914]" /> Director / Admin DP
-            </h3>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-bold text-base text-[#111111] flex items-center gap-2">
+                <Camera className="h-5 w-5 text-[#E50914]" /> Director Profile & DP
+              </h3>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-[#E50914] uppercase">
+                {profile?.role || 'Super Admin'}
+              </span>
+            </div>
             <p className="text-xs text-gray-400 mb-4">
-              Change administrator profile picture from device gallery — no links required
+              Edit director credentials & profile picture from device gallery — no links required
             </p>
 
             <input
@@ -291,13 +337,14 @@ export default function SettingsPage() {
               onChange={handleAdminDpUpload}
             />
 
-            <div className="flex items-center gap-4">
+            {/* Photo Avatar Preview & Action */}
+            <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-xl border border-gray-100 mb-4">
               <div className="relative group shrink-0">
                 <div className="w-16 h-16 rounded-full overflow-hidden bg-red-50 border-2 border-[#E50914] flex items-center justify-center font-bold text-lg text-[#E50914]">
                   {profile?.avatar_url ? (
                     <img src={profile.avatar_url} alt="Admin DP" className="w-full h-full object-cover" />
-                  ) : profile?.full_name ? (
-                    profile.full_name[0].toUpperCase()
+                  ) : adminName ? (
+                    adminName[0].toUpperCase()
                   ) : (
                     'A'
                   )}
@@ -314,19 +361,73 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex-1">
-                <p className="text-xs font-bold text-[#111111]">{profile?.full_name || 'Corpus Club Director'}</p>
-                <p className="text-[10px] text-gray-400">{profile?.email || 'yuvraj@corpuss.com'}</p>
+                <p className="text-xs font-bold text-[#111111]">{adminName || 'Corpus Club Director'}</p>
+                <p className="text-[10px] text-gray-400">{adminEmail || 'yuvraj@corpuss.com'}</p>
                 <button
                   type="button"
                   onClick={() => adminDpInputRef.current?.click()}
                   disabled={isUploadingAdminDp}
-                  className="mt-2 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 text-[11px] font-bold rounded-lg inline-flex items-center gap-1.5 cursor-pointer border border-gray-300 transition-colors"
+                  className="mt-2 px-3 py-1 bg-white hover:bg-gray-100 text-gray-800 text-[11px] font-bold rounded-lg inline-flex items-center gap-1.5 cursor-pointer border border-gray-300 transition-colors shadow-sm"
                 >
                   <Upload className="w-3.5 h-3.5 text-[#E50914]" />
                   {isUploadingAdminDp ? 'Uploading...' : '📁 Change DP (Device Gallery)'}
                 </button>
               </div>
             </div>
+
+            {/* Profile Fields Form */}
+            <form onSubmit={handleSaveAdminProfile} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  Director / Admin Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={adminName}
+                  onChange={(e) => setAdminName(e.target.value)}
+                  placeholder="e.g. Yuvraj (Club Director)"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#E50914]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  Admin Sign-In Email *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  placeholder="yuvraj@corpuss.com"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#E50914]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  Director Phone / WhatsApp *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={adminPhone}
+                  onChange={(e) => setAdminPhone(e.target.value)}
+                  placeholder="+91 76206 83995"
+                  className="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#E50914]"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSavingAdminProfile}
+                className="w-full mt-2 inline-flex items-center justify-center gap-2 bg-[#E50914] hover:bg-[#B91C1C] text-white text-xs font-bold py-2.5 rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{isSavingAdminProfile ? 'Saving Changes...' : 'Save Admin Profile'}</span>
+              </button>
+            </form>
           </div>
 
           {/* Admin Master Password Card */}

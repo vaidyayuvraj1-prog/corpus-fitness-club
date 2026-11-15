@@ -54,7 +54,7 @@ export default function MemberDashboard() {
   const [monthlyReport, setMonthlyReport] = useState<MonthlyFitnessReportData | null>(null)
   const [assignedTrainer, setAssignedTrainer] = useState<Trainer | null>(null)
 
-  useEffect(() => {
+  const loadDashboardData = () => {
     // Look up member record
     const allMembers = db.getMembers()
     const matched =
@@ -104,6 +104,13 @@ export default function MemberDashboard() {
       const diets = db.getDiets()
       setAssignedDiet(diets[0] || null)
     }
+  }
+
+  useEffect(() => {
+    loadDashboardData()
+    const handleSync = () => loadDashboardData()
+    window.addEventListener('cfc_db_synced', handleSync)
+    return () => window.removeEventListener('cfc_db_synced', handleSync)
   }, [profile])
 
   const hasTrainer = Boolean(member?.trainer_id && member.trainer_id !== 'none' && member?.trainer_name)

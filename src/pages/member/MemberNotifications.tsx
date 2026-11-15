@@ -23,10 +23,24 @@ export default function MemberNotifications() {
 
   useEffect(() => {
     loadNotifs()
+    const handleSync = () => loadNotifs()
+    window.addEventListener('cfc_db_synced', handleSync)
+    return () => window.removeEventListener('cfc_db_synced', handleSync)
   }, [])
 
   function loadNotifs() {
     setNotifications(db.getNotifications())
+  }
+
+  const safeFormatDate = (dateStr: string | undefined, pattern: string) => {
+    if (!dateStr) return 'Recent'
+    try {
+      const d = new Date(dateStr)
+      if (isNaN(d.getTime())) return 'Recent'
+      return format(d, pattern)
+    } catch {
+      return 'Recent'
+    }
   }
 
   const handleMarkAllRead = () => {
@@ -173,7 +187,7 @@ export default function MemberNotifications() {
 
                         <span className="text-[11px] text-gray-400 flex items-center gap-1 ml-auto">
                           <Clock className="w-3 h-3" />
-                          {format(new Date(n.created_at), 'dd MMM, hh:mm a')}
+                          {safeFormatDate(n.created_at, 'dd MMM, hh:mm a')}
                         </span>
                       </div>
 

@@ -56,6 +56,7 @@ const KEYS = {
   EXERCISE_LIBRARY: 'cfc_db_exercise_library',
   TRAINER_FEEDBACK: 'cfc_db_trainer_feedback',
   AUDIT_LOGS: 'cfc_db_audit_logs',
+  ADMIN_PROFILE: 'cfc_db_admin_profile',
 }
 
 // Hardcoded Fake Demo Member Identifiers to Purge
@@ -1457,9 +1458,52 @@ function seedDatabase() {
   if (!localStorage.getItem(KEYS.ASSIGNMENTS)) setLocalSeed(KEYS.ASSIGNMENTS, [])
   if (!localStorage.getItem(KEYS.WORKOUT_SESSIONS)) setLocalSeed(KEYS.WORKOUT_SESSIONS, [])
   if (!localStorage.getItem(KEYS.TRAINER_FEEDBACK)) setLocalSeed(KEYS.TRAINER_FEEDBACK, [])
-  if (!localStorage.getItem(KEYS.NOTIFICATIONS)) setLocalSeed(KEYS.NOTIFICATIONS, [])
+  if (!localStorage.getItem(KEYS.NOTIFICATIONS)) {
+    const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
+      {
+        id: 'notif-default-1',
+        title: 'Sunday Deep Sanitization & Floor Maintenance',
+        message: 'Dear Members, Corpus Fitness Club Amravati facility will remain closed this Sunday for scheduled deep sanitization and cable equipment servicing. Regular shift hours resume Monday 6:00 AM sharp.',
+        type: 'warning',
+        priority: 'high',
+        target_audience: 'all',
+        sent_by: 'CFC Admin Office',
+        channels: ['in_app', 'whatsapp'],
+        read: false,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'notif-default-2',
+        title: 'Reminder: Morning & Evening Shift Timings',
+        message: 'Gym shift hours: Morning: 6:00 AM – 11:00 AM | Evening: 5:00 PM – 10:00 PM (Sunday Closed). Please make sure to scan your personal QR code at the reception counter before entering the gym floor.',
+        type: 'info',
+        priority: 'normal',
+        target_audience: 'all',
+        sent_by: 'CFC Front Desk',
+        channels: ['in_app', 'whatsapp'],
+        read: false,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'notif-default-3',
+        title: '30-Day Body Transformation Challenge 2026',
+        message: 'Registrations are now open for our annual Body Transformation Challenge! Includes free baseline body composition analysis, certified coach meal protocol, and exciting trophies for top transformations.',
+        type: 'success',
+        priority: 'high',
+        target_audience: 'all',
+        sent_by: 'CFC Chief Trainer',
+        channels: ['in_app', 'whatsapp'],
+        read: false,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      },
+    ]
+    setLocalSeed(KEYS.NOTIFICATIONS, DEFAULT_NOTIFICATIONS)
+  }
 
-  // 8. Active LocalStorage Purge: Remove stale demo data from browser storage on any device
+  // 8. Active LocalStorage Purge: Remove ONLY stale fake demo member records without wiping user data
   try {
     const rawMembers = localStorage.getItem(KEYS.MEMBERS)
     if (rawMembers) {
@@ -1485,8 +1529,6 @@ function seedDatabase() {
       KEYS.ASSIGNMENTS,
       KEYS.WORKOUT_SESSIONS,
       KEYS.TRAINER_FEEDBACK,
-      KEYS.NOTIFICATIONS,
-      KEYS.TRAINERS,
     ]
     demoPurgeKeys.forEach((k) => {
       const val = localStorage.getItem(k)
@@ -1494,26 +1536,15 @@ function seedDatabase() {
         try {
           const parsed = JSON.parse(val)
           if (Array.isArray(parsed)) {
-            const hasDemo = parsed.some((item: any) =>
-              item?.id?.startsWith('pay-') ||
-              item?.id?.startsWith('att-') ||
-              item?.id?.startsWith('enq-') ||
-              item?.id?.startsWith('exp-') ||
-              item?.id?.startsWith('prog-') ||
-              item?.id?.startsWith('ren-') ||
-              item?.id?.startsWith('asg-') ||
-              item?.id?.startsWith('ws-') ||
-              item?.id?.startsWith('tf-') ||
-              item?.id?.startsWith('notif-') ||
-              item?.id?.startsWith('trainer-') ||
-              item?.member_id === 'mem-1' ||
-              item?.member_id === 'mem-2' ||
-              item?.member_id === 'mem-3' ||
-              item?.member_id === 'mem-4' ||
-              item?.member_id === 'mem-5'
-            )
-            if (hasDemo) {
-              localStorage.setItem(k, '[]')
+            const cleaned = parsed.filter((item: any) => {
+              if (!item) return false
+              if (item.member_id && FAKE_MEMBER_IDS.has(item.member_id)) return false
+              if (item.email && FAKE_MEMBER_EMAILS.has((item.email || '').toLowerCase())) return false
+              if (item.id && typeof item.id === 'string' && item.id.startsWith('demo-fake-')) return false
+              return true
+            })
+            if (cleaned.length !== parsed.length) {
+              localStorage.setItem(k, JSON.stringify(cleaned))
             }
           }
         } catch {}
@@ -1528,6 +1559,35 @@ seedDatabase()
 // ── Exported API Methods ──────────────────────────────────────────────────────
 
 export const db = {
+  // Admin & Director Profile (Multi-device synced across devices & cloud)
+  getAdminProfile(): Profile {
+    seedDatabase()
+    const defaultAdmin: Profile = {
+      id: 'profile-yuvraj',
+      full_name: 'Yuvraj (Club Director)',
+      phone: '+91 76206 83995',
+      email: 'yuvraj@corpuss.com',
+      role: 'super_admin',
+      avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: new Date().toISOString(),
+    }
+    const saved = getItem<Profile | null>(KEYS.ADMIN_PROFILE, null)
+    return saved ? { ...defaultAdmin, ...saved } : defaultAdmin
+  },
+
+  saveAdminProfile(updates: Partial<Profile>): Profile {
+    seedDatabase()
+    const current = this.getAdminProfile()
+    const updated: Profile = {
+      ...current,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    }
+    setItem(KEYS.ADMIN_PROFILE, updated)
+    return updated
+  },
+
   // Members
   getMembers(): Member[] {
     const list = getItem<Member[]>(KEYS.MEMBERS, [])
@@ -1675,18 +1735,17 @@ export const db = {
       const selectedPlan = plans.find((p) => p.id === member.current_plan_id)
       if (selectedPlan) {
         const start = new Date()
-        const end = new Date()
-        end.setMonth(end.getMonth() + selectedPlan.duration_months)
+        const end = addMonths(start, selectedPlan.duration_months)
 
         const msId = `ms-${Date.now()}`
         const ms: Membership = {
           id: msId,
           member_id: newId,
           plan_id: selectedPlan.id,
-          start_date: format(start, 'yyyy-MM-dd'),
-          end_date: format(end, 'yyyy-MM-dd'),
-          amount_paid: selectedPlan.price_men,
-          payment_method: 'UPI',
+          start_date: member.current_plan?.start_date || format(start, 'yyyy-MM-dd'),
+          end_date: member.current_plan?.end_date || format(end, 'yyyy-MM-dd'),
+          amount_paid: member.current_plan?.amount_paid || selectedPlan.price_men,
+          payment_method: member.current_plan?.payment_method || 'UPI',
           status: 'active',
           created_at: new Date().toISOString(),
           plan: selectedPlan,
@@ -2493,6 +2552,7 @@ export const db = {
     plan_id: string
     renewal_date: string // Exact date when customer renewed (YYYY-MM-DD)
     new_start_date?: string
+    new_expiry_date?: string
     duration_months?: number
     amount_paid: number
     discount_amount?: number
@@ -2510,7 +2570,14 @@ export const db = {
     const renewalDate = params.renewal_date || format(new Date(), 'yyyy-MM-dd')
     const startDate = params.new_start_date || renewalDate
     const months = params.duration_months || plan.duration_months || 1
-    const newEndDate = format(addMonths(new Date(startDate), months), 'yyyy-MM-dd')
+
+    // Safely parse start date without UTC timezone skew
+    const [sY, sM, sD] = startDate.split('-').map(Number)
+    const safeStartDate = new Date(sY, (sM || 1) - 1, sD || 1)
+    const newEndDate =
+      params.new_expiry_date && params.new_expiry_date.trim() !== ''
+        ? params.new_expiry_date
+        : format(addMonths(safeStartDate, months), 'yyyy-MM-dd')
 
     // Generate receipt number
     const payments = this.getPayments()

@@ -155,7 +155,16 @@ export default function MemberWorkout() {
       setCustomPlans(custom)
       setActiveAssignment(assignment || null)
       setAssignedPlan(assigned || defaults[0] || null)
-      setSelectedPlan(assigned || defaults[0] || null)
+
+      // Retain active selection across 3-second database sync pulses
+      setSelectedPlan((prev) => {
+        const allAvailable = [...defaults, ...custom, ...(assigned ? [assigned] : [])]
+        if (prev) {
+          const matchedCurrent = allAvailable.find((p) => p.id === prev.id)
+          if (matchedCurrent) return matchedCurrent
+        }
+        return assigned || defaults[0] || null
+      })
 
       const history = db.getWorkoutSessions(matched.id)
       setPastSessions(history)

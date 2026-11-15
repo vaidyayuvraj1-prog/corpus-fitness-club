@@ -98,10 +98,24 @@ export default function AdminNotificationsPage() {
 
   useEffect(() => {
     loadNotifications()
+    const handleSync = () => loadNotifications()
+    window.addEventListener('cfc_db_synced', handleSync)
+    return () => window.removeEventListener('cfc_db_synced', handleSync)
   }, [])
 
   function loadNotifications() {
     setNotifications(db.getNotifications())
+  }
+
+  const safeFormatDate = (dateStr: string | undefined, formatPattern: string) => {
+    if (!dateStr) return 'Recent'
+    try {
+      const d = new Date(dateStr)
+      if (isNaN(d.getTime())) return 'Recent'
+      return format(d, formatPattern)
+    } catch {
+      return 'Recent'
+    }
   }
 
   const applyTemplate = (tpl: (typeof QUICK_TEMPLATES)[0]) => {
@@ -134,6 +148,7 @@ export default function AdminNotificationsPage() {
       channels: ['in_app', 'whatsapp'],
     })
 
+    window.dispatchEvent(new CustomEvent('cfc_db_synced'))
     loadNotifications()
     setShowModal(false)
     toast.success('Notification broadcasted successfully to all target members!')
@@ -151,6 +166,7 @@ export default function AdminNotificationsPage() {
 
   const handleDelete = (id: string) => {
     db.deleteNotification(id)
+    window.dispatchEvent(new CustomEvent('cfc_db_synced'))
     loadNotifications()
     setDeleteConfirm(null)
     toast.success('Broadcast notice removed successfully.')
@@ -409,7 +425,7 @@ export default function AdminNotificationsPage() {
 
                     <span className="text-[11px] text-gray-400 flex items-center gap-1 ml-auto md:ml-0">
                       <Clock className="w-3.5 h-3.5" />
-                      {format(new Date(n.created_at), 'dd MMM yyyy, hh:mm a')}
+                      {safeFormatDate(n.created_at, 'dd MMM yyyy, hh:mm a')}
                     </span>
                   </div>
 

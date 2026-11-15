@@ -29,6 +29,17 @@ import { db } from '@/lib/db'
 import type { MembershipPlan, Member, MembershipRenewalLog } from '@/types/database'
 import { format, addMonths, addDays, differenceInDays } from 'date-fns'
 
+function safeFormatDate(dStr: string | undefined, fmt: string, fallback: string = 'N/A'): string {
+  if (!dStr) return fallback
+  try {
+    const d = new Date(dStr)
+    if (isNaN(d.getTime())) return fallback
+    return format(d, fmt)
+  } catch {
+    return fallback
+  }
+}
+
 export default function MembershipsPage() {
   const [plans, setPlans] = useState<MembershipPlan[]>([])
   const [members, setMembers] = useState<Member[]>([])
@@ -56,6 +67,7 @@ export default function MembershipsPage() {
     plan_id: '',
     renewal_date: format(new Date(), 'yyyy-MM-dd'), // Exact date customer renewed!
     new_start_date: format(new Date(), 'yyyy-MM-dd'),
+    new_expiry_date: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
     duration_months: 1,
     amount_paid: 1500,
     discount_amount: 0,
@@ -159,14 +171,32 @@ export default function MembershipsPage() {
   const handleOpenRenewal = (m: Member) => {
     setRenewalMember(m)
     const currentPlan = plans.find((p) => p.id === m.current_plan?.plan_id) || plans[0]
-    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    const today = new Date()
+    const todayStr = format(today, 'yyyy-MM-dd')
     const price = currentPlan ? currentPlan.price_men : 1500
+
+    // Intelligent start date: If member has an active plan with days remaining, extend from current expiry date
+    let startDateStr = todayStr
+    const curEnd = m.current_plan?.end_date
+    if (curEnd) {
+      const [eY, eM, eD] = curEnd.split('-').map(Number)
+      const curEndDate = new Date(eY, (eM || 1) - 1, eD || 1)
+      if (curEndDate > today) {
+        startDateStr = curEnd
+      }
+    }
+
+    const duration = currentPlan ? currentPlan.duration_months : 1
+    const [sY, sM, sD] = startDateStr.split('-').map(Number)
+    const safeStart = new Date(sY, (sM || 1) - 1, sD || 1)
+    const calculatedExpiry = format(addMonths(safeStart, duration), 'yyyy-MM-dd')
 
     setRenewalForm({
       plan_id: currentPlan ? currentPlan.id : (plans[0]?.id || ''),
       renewal_date: todayStr,
-      new_start_date: todayStr,
-      duration_months: currentPlan ? currentPlan.duration_months : 1,
+      new_start_date: startDateStr,
+      new_expiry_date: calculatedExpiry,
+      duration_months: duration,
       amount_paid: price,
       discount_amount: 0,
       payment_method: 'UPI',
@@ -186,9 +216,10 @@ export default function MembershipsPage() {
       const res = db.renewMember({
         member_id: renewalMember.id,
         plan_id: renewalForm.plan_id,
-        renewal_date: renewalForm.renewal_date, // Kab customer ne renew kiya!
+        renewal_date: renewalForm.renewal_date,
         new_start_date: renewalForm.new_start_date,
-        duration_months: selectedPlan.duration_months,
+        new_expiry_date: renewalForm.new_expiry_date,
+        duration_months: renewalForm.duration_months || selectedPlan.duration_months,
         amount_paid: Number(renewalForm.amount_paid),
         discount_amount: Number(renewalForm.discount_amount),
         payment_method: renewalForm.payment_method,
@@ -854,11 +885,15 @@ export default function MembershipsPage() {
                     onChange={(e) => {
                       const selected = plans.find((p) => p.id === e.target.value)
                       if (selected) {
+                        const [sY, sM, sD] = renewalForm.new_start_date.split('-').map(Number)
+                        const safeStart = new Date(sY, (sM || 1) - 1, sD || 1)
+                        const newEnd = format(addMonths(safeStart, selected.duration_months), 'yyyy-MM-dd')
                         setRenewalForm({
                           ...renewalForm,
                           plan_id: selected.id,
                           duration_months: selected.duration_months,
                           amount_paid: selected.price_men,
+                          new_expiry_date: newEnd,
                         })
                       }
                     }}
@@ -872,22 +907,53 @@ export default function MembershipsPage() {
                   </select>
                 </div>
 
-                {/* Auto Calculated Expiry Preview */}
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs flex items-center justify-between">
+                {/* Start Date & Expiry Date Inputs */}
+                <div className="grid grid-cols-2 gap-3 p-3.5 bg-gray-50 rounded-xl border border-gray-200">
                   <div>
-                    <span className="text-gray-400 block text-[10px] uppercase font-bold">New Start Date</span>
-                    <span className="font-bold text-gray-800">
-                      {format(new Date(renewalForm.new_start_date), 'dd MMM yyyy')}
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                      Cycle Start Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={renewalForm.new_start_date}
+                      onChange={(e) => {
+                        const newStart = e.target.value
+                        if (!newStart) {
+                          setRenewalForm({ ...renewalForm, new_start_date: '' })
+                          return
+                        }
+                        const [sY, sM, sD] = newStart.split('-').map(Number)
+                        const safeStart = new Date(sY, (sM || 1) - 1, sD || 1)
+                        const newEnd = !isNaN(safeStart.getTime())
+                          ? format(addMonths(safeStart, renewalForm.duration_months), 'yyyy-MM-dd')
+                          : renewalForm.new_expiry_date
+                        setRenewalForm({
+                          ...renewalForm,
+                          new_start_date: newStart,
+                          new_expiry_date: newEnd,
+                        })
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#E50914] bg-white"
+                    />
+                    <span className="text-[10px] text-gray-500 mt-1 block">
+                      {safeFormatDate(renewalForm.new_start_date, 'dd MMM yyyy')}
                     </span>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-gray-400" />
-                  <div className="text-right">
-                    <span className="text-gray-400 block text-[10px] uppercase font-bold">New Expiry Date</span>
-                    <span className="font-bold text-emerald-600">
-                      {format(
-                        addMonths(new Date(renewalForm.new_start_date), renewalForm.duration_months),
-                        'dd MMM yyyy'
-                      )}
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                      New Expiry Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={renewalForm.new_expiry_date}
+                      onChange={(e) => setRenewalForm({ ...renewalForm, new_expiry_date: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 text-xs font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                    />
+                    <span className="text-[10px] text-emerald-600 font-bold mt-1 block">
+                      Valid thru: {safeFormatDate(renewalForm.new_expiry_date, 'dd MMM yyyy')}
                     </span>
                   </div>
                 </div>

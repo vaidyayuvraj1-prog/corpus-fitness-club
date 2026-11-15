@@ -172,19 +172,12 @@ export const useAuthStore = create<AuthState>()(
           }
         }
 
-        const prof: Profile =
-          normalizedInput.includes('yuvraj')
-            ? {
-                id: 'profile-yuvraj',
-                full_name: 'Yuvraj (Club Director)',
-                phone: '+91 76206 83995',
-                email: 'yuvraj@corpuss.com',
-                role: 'super_admin',
-                avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              }
-            : DEMO_PROFILES[assignedRole]
+        const savedAdmin = db.getAdminProfile()
+        const prof: Profile = {
+          ...DEMO_PROFILES[assignedRole],
+          ...savedAdmin,
+          role: assignedRole,
+        }
 
         const user = { id: prof.id, email: prof.email }
         const session = { access_token: `cfc-token-${prof.id}`, user }
@@ -346,6 +339,30 @@ export const useAuthStore = create<AuthState>()(
       const current = get().profile
       if (!current) return { error: 'Not authenticated' }
       const updated = { ...current, ...updates, updated_at: new Date().toISOString() }
+
+      // Persist across devices & database store
+      const currentRole = get().role
+      if (currentRole === 'admin' || currentRole === 'super_admin') {
+        db.saveAdminProfile(updates)
+      } else if (currentRole === 'member') {
+        const members = db.getMembers()
+        const pEmail = (current.email || '').toLowerCase().trim()
+        const matched = members.find((m) =>
+          m.id === current.id ||
+          m.profile_id === current.id ||
+          (m.email && m.email.toLowerCase().trim() === pEmail) ||
+          (m.profile?.email && m.profile.email.toLowerCase().trim() === pEmail)
+        )
+        if (matched) {
+          db.saveMember({
+            id: matched.id,
+            photo_url: updates.avatar_url || matched.photo_url,
+            full_name: updates.full_name || matched.profile?.full_name,
+            phone: updates.phone || matched.phone,
+          })
+        }
+      }
+
       localStorage.setItem(
         AUTH_STORAGE_KEY,
         JSON.stringify({ user: get().user, session: get().session, profile: updated, role: get().role })
@@ -358,7 +375,26 @@ export const useAuthStore = create<AuthState>()(
 
 // Helper to re-sync DP and profile from local/cloud records
 function syncProfileAvatar(profile: Profile, role: UserRole): Profile {
-  if (role === 'member') {
+  if (role === 'admin' || role === 'super_admin') {
+    const adminProf = db.getAdminProfile()
+    if (adminProf) {
+      const hasChanges =
+        (adminProf.avatar_url && adminProf.avatar_url !== profile.avatar_url) ||
+        (adminProf.full_name && adminProf.full_name !== profile.full_name) ||
+        (adminProf.phone && adminProf.phone !== profile.phone) ||
+        (adminProf.email && adminProf.email !== profile.email)
+      if (hasChanges) {
+        return {
+          ...profile,
+          avatar_url: adminProf.avatar_url || profile.avatar_url,
+          full_name: adminProf.full_name || profile.full_name,
+          phone: adminProf.phone || profile.phone,
+          email: adminProf.email || profile.email,
+        }
+      }
+    }
+    return profile
+  } else if (role === 'member') {
     const members = db.getMembers()
     const pEmail = (profile.email || '').toLowerCase().trim()
     const matched = members.find((m) =>
