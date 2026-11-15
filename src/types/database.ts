@@ -182,8 +182,9 @@ export interface WorkoutPlan {
   member_id?: string | null // For custom plans owned by member
   is_active: boolean
   is_default?: boolean // True for the 7 Admin core templates
-  is_custom?: boolean // True for custom plans created by members
+  is_custom?: boolean // True for custom plans created by members or admins
   created_by_role?: 'admin' | 'trainer' | 'member'
+  duration_weeks?: number // 4, 6, 8, 12, 16 weeks
   days_per_week?: number
   exercises?: Exercise[]
   created_at: string
@@ -222,6 +223,27 @@ export interface MemberWorkout {
   end_date?: string | null
   is_active: boolean
   created_at: string
+}
+
+export interface MemberWorkoutAssignment {
+  id: string
+  member_id: string
+  member_name: string
+  member_code: string
+  member_phone?: string
+  workout_plan_id: string
+  workout_plan_name: string
+  plan_snapshot: WorkoutPlan // Immutable snapshot of plan at assignment time
+  trainer_id?: string | null
+  trainer_name?: string | null
+  assigned_by: string
+  assigned_by_role: 'admin' | 'trainer'
+  start_date: string // YYYY-MM-DD
+  end_date: string // YYYY-MM-DD
+  personal_instructions?: string
+  status: 'active' | 'completed' | 'archived'
+  created_at: string
+  updated_at?: string
 }
 
 export interface WorkoutSetRecord {

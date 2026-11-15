@@ -7,6 +7,7 @@ import type {
   Payment,
   Attendance,
   WorkoutPlan,
+  MemberWorkoutAssignment,
   DietPlan,
   Enquiry,
   Expense,
@@ -41,6 +42,7 @@ const KEYS = {
   ATTENDANCE: 'cfc_db_attendance',
   TRAINERS: 'cfc_db_trainers',
   WORKOUTS: 'cfc_db_workouts',
+  WORKOUT_ASSIGNMENTS: 'cfc_db_workout_assignments',
   DIETS: 'cfc_db_diets',
   ENQUIRIES: 'cfc_db_enquiries',
   EXPENSES: 'cfc_db_expenses',
@@ -715,7 +717,7 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
   // 1. Beginner Workout
   {
     id: 'wp-default-beginner',
-    name: 'Beginner Workout (Foundation Protocol)',
+    name: 'Beginner Workout – Foundation Protocol',
     category: 'Beginner Workout',
     level: 'beginner',
     description: 'Complete introductory strength & conditioning split designed to build joint stability, neural adaptation, and safe lifting form across major movements.',
@@ -724,6 +726,7 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
     is_default: true,
     is_custom: false,
     created_by_role: 'admin',
+    duration_weeks: 6,
     days_per_week: 3,
     created_at: '2025-01-01T00:00:00Z',
     exercises: [
@@ -805,7 +808,7 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
   // 2. Weight Loss
   {
     id: 'wp-default-weightloss',
-    name: 'Weight Loss & High Intensity Metabolic Shred',
+    name: 'Weight Loss – Fat Burning Program',
     category: 'Weight Loss',
     level: 'intermediate',
     description: 'High-caloric burn circuit combining compound resistance lifting with short rest intervals and cardio finishers for optimal EPOC fat loss.',
@@ -814,6 +817,7 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
     is_default: true,
     is_custom: false,
     created_by_role: 'admin',
+    duration_weeks: 8,
     days_per_week: 4,
     created_at: '2025-01-01T00:00:00Z',
     exercises: [
@@ -883,7 +887,7 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
   // 3. Muscle Building
   {
     id: 'wp-default-musclebuilding',
-    name: 'Muscle Building & Hypertrophy Split',
+    name: 'Muscle Building – Hypertrophy Program',
     category: 'Muscle Building',
     level: 'intermediate',
     description: 'Hypertrophy-focused volume training targeting mechanical tension and metabolic stress across major muscle groups for maximum size and symmetry.',
@@ -892,6 +896,7 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
     is_default: true,
     is_custom: false,
     created_by_role: 'admin',
+    duration_weeks: 12,
     days_per_week: 4,
     created_at: '2025-01-01T00:00:00Z',
     exercises: [
@@ -973,7 +978,7 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
   // 4. Strength Training
   {
     id: 'wp-default-strength',
-    name: 'Strength Training & 5x5 Power Protocol',
+    name: 'Strength Training – Power Protocol',
     category: 'Strength Training',
     level: 'advanced',
     description: 'Linear progressive overload protocol built around the Big 3 power movements: Squat, Bench Press, and Deadlift for maximal force output.',
@@ -982,7 +987,8 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
     is_default: true,
     is_custom: false,
     created_by_role: 'admin',
-    days_per_week: 3,
+    duration_weeks: 12,
+    days_per_week: 4,
     created_at: '2025-01-01T00:00:00Z',
     exercises: [
       {
@@ -1051,15 +1057,16 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
   // 5. Full Body Workout
   {
     id: 'wp-default-fullbody',
-    name: 'Full Body Functional Conditioning',
+    name: 'Full Body – Functional Conditioning',
     category: 'Full Body Workout',
-    level: 'intermediate',
+    level: 'beginner',
     description: '3-day full body split designed for peak athletic conditioning, functional mobility, core stability, and total body strength.',
     trainer_name: 'Coach Rohit Deshmukh',
     is_active: true,
     is_default: true,
     is_custom: false,
     created_by_role: 'admin',
+    duration_weeks: 8,
     days_per_week: 3,
     created_at: '2025-01-01T00:00:00Z',
     exercises: [
@@ -1141,15 +1148,16 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
   // 6. Push Pull Legs
   {
     id: 'wp-default-ppl',
-    name: 'Push Pull Legs (PPL) Elite Split',
+    name: 'Push Pull Legs – Elite Split',
     category: 'Push Pull Legs',
-    level: 'intermediate',
+    level: 'advanced',
     description: 'The premier 6-day hypertrophy and athletic split isolating push mechanics (chest/delts/triceps), pull mechanics (back/biceps), and lower body.',
     trainer_name: 'Coach Rohit Deshmukh',
     is_active: true,
     is_default: true,
     is_custom: false,
     created_by_role: 'admin',
+    duration_weeks: 12,
     days_per_week: 6,
     created_at: '2025-01-01T00:00:00Z',
     exercises: [
@@ -1243,7 +1251,7 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
   // 7. Home Workout
   {
     id: 'wp-default-home',
-    name: 'Home Workout & Calisthenics Routine',
+    name: 'Home Workout – No Equipment',
     category: 'Home Workout',
     level: 'beginner',
     description: 'Zero-equipment home & travel routine utilizing bodyweight leverage, core isometric holds, and high-frequency cardiovascular conditioning.',
@@ -1252,6 +1260,7 @@ export const CORE_DEFAULT_WORKOUT_PLANS: WorkoutPlan[] = [
     is_default: true,
     is_custom: false,
     created_by_role: 'admin',
+    duration_weeks: 4,
     days_per_week: 4,
     created_at: '2025-01-01T00:00:00Z',
     exercises: [
@@ -1337,15 +1346,41 @@ function seedDatabase() {
     let updatedWorkouts = [...existingWorkouts]
     let modified = false
     CORE_DEFAULT_WORKOUT_PLANS.forEach((defPlan) => {
-      const found = updatedWorkouts.some((w) => w.id === defPlan.id || w.name === defPlan.name)
-      if (!found) {
+      const idx = updatedWorkouts.findIndex((w) => w.id === defPlan.id)
+      if (idx === -1) {
         updatedWorkouts.push(defPlan)
         modified = true
+      } else {
+        // Upgrade default plan metadata if outdated
+        const cur = updatedWorkouts[idx]
+        if (
+          cur.name !== defPlan.name ||
+          !cur.duration_weeks ||
+          cur.duration_weeks !== defPlan.duration_weeks ||
+          cur.level !== defPlan.level ||
+          cur.category !== defPlan.category
+        ) {
+          updatedWorkouts[idx] = {
+            ...cur,
+            name: defPlan.name,
+            duration_weeks: defPlan.duration_weeks,
+            days_per_week: defPlan.days_per_week,
+            level: defPlan.level,
+            category: defPlan.category,
+            is_default: true,
+          }
+          modified = true
+        }
       }
     })
     if (modified) {
       setLocalSeed(KEYS.WORKOUTS, updatedWorkouts)
     }
+  }
+
+  // Member Workout Assignments Store
+  if (!localStorage.getItem(KEYS.WORKOUT_ASSIGNMENTS)) {
+    setLocalSeed(KEYS.WORKOUT_ASSIGNMENTS, [])
   }
 
   // 5. Trainers (Clean list - ready for real coaches to be registered by Admin)
@@ -2179,7 +2214,11 @@ export const db = {
 
   // Workouts & Diets
   getWorkouts(): WorkoutPlan[] {
+    seedDatabase()
     return getItem<WorkoutPlan[]>(KEYS.WORKOUTS, [])
+  },
+  getWorkoutById(id: string): WorkoutPlan | undefined {
+    return this.getWorkouts().find((w) => w.id === id)
   },
   saveWorkout(workout: Partial<WorkoutPlan>): WorkoutPlan {
     const workouts = this.getWorkouts()
@@ -2201,7 +2240,7 @@ export const db = {
       category: workout.category || 'General Fitness',
       level: workout.level || 'beginner',
       description: workout.description || '',
-      trainer_name: workout.trainer_name || (workout.created_by_role === 'member' ? 'Self-Trained' : 'Coach Rohit'),
+      trainer_name: workout.trainer_name || (workout.created_by_role === 'member' ? 'Self-Trained' : 'Coach Rohit Deshmukh'),
       trainer_id: workout.trainer_id || null,
       member_id: workout.member_id || workout.assigned_member_id || null,
       assigned_member_id: workout.assigned_member_id || workout.member_id || null,
@@ -2209,6 +2248,7 @@ export const db = {
       is_default: workout.is_default || false,
       is_custom: workout.is_custom !== undefined ? workout.is_custom : (workout.created_by_role === 'member' || Boolean(workout.member_id)),
       created_by_role: workout.created_by_role || (workout.member_id ? 'member' : 'admin'),
+      duration_weeks: workout.duration_weeks || 8,
       days_per_week: workout.days_per_week || 4,
       exercises: workout.exercises || [],
       created_at: workout.created_at || new Date().toISOString(),
@@ -2220,6 +2260,10 @@ export const db = {
     return newWorkout
   },
   deleteWorkout(id: string): void {
+    const target = this.getWorkouts().find((w) => w.id === id)
+    if (target?.is_default) {
+      throw new Error('Default workout templates are permanent core gym programs and cannot be deleted. You can edit them or duplicate as a custom plan.')
+    }
     const workouts = this.getWorkouts().filter((w) => w.id !== id)
     setItem(KEYS.WORKOUTS, workouts)
   },
@@ -2745,8 +2789,136 @@ export const db = {
     return cloned
   },
 
+  // ── Member Workout Assignments (Decoupled, Immutable Snapshots) ──────────────
+  getWorkoutAssignments(memberId?: string): MemberWorkoutAssignment[] {
+    seedDatabase()
+    const all = getItem<MemberWorkoutAssignment[]>(KEYS.WORKOUT_ASSIGNMENTS, [])
+    if (!memberId) return all
+    return all.filter((a) => a.member_id === memberId)
+  },
+
+  getActiveWorkoutAssignment(memberId: string): MemberWorkoutAssignment | null {
+    const list = this.getWorkoutAssignments()
+    const member = this.getMemberById(memberId)
+    const active = list.find(
+      (a) =>
+        a.status === 'active' &&
+        (a.member_id === memberId ||
+          (member &&
+            (a.member_id === member.id ||
+              a.member_code === member.member_id ||
+              (a.member_name &&
+                member.profile?.full_name &&
+                a.member_name.toLowerCase() === member.profile.full_name.toLowerCase()))))
+    )
+    return active || null
+  },
+
+  assignWorkoutToMember(params: {
+    member_id: string
+    workout_plan_id: string
+    trainer_id?: string | null
+    trainer_name?: string | null
+    assigned_by?: string
+    assigned_by_role?: 'admin' | 'trainer'
+    start_date?: string
+    end_date?: string
+    personal_instructions?: string
+  }): MemberWorkoutAssignment {
+    seedDatabase()
+    const member = this.getMemberById(params.member_id)
+    if (!member) throw new Error('Selected member not found in registry')
+
+    const plan = this.getWorkouts().find((w) => w.id === params.workout_plan_id)
+    if (!plan) throw new Error('Selected workout routine not found')
+
+    // Immutable deep copy snapshot of the routine at assignment time
+    // Ensures subsequent edits/deletions of the master template NEVER corrupt member's prescribed workout
+    const planSnapshot: WorkoutPlan = JSON.parse(JSON.stringify(plan))
+    planSnapshot.assigned_member_id = member.id
+    if (params.trainer_name) planSnapshot.trainer_name = params.trainer_name
+    if (params.trainer_id) planSnapshot.trainer_id = params.trainer_id
+
+    const durationWeeks = plan.duration_weeks || 8
+    const startDate = params.start_date || format(new Date(), 'yyyy-MM-dd')
+    const endDate = params.end_date || format(addDays(new Date(startDate), durationWeeks * 7), 'yyyy-MM-dd')
+
+    // Mark prior active assignments for this member as completed
+    const existing = this.getWorkoutAssignments()
+    const updated = existing.map((a) => {
+      if (a.member_id === member.id && a.status === 'active') {
+        return { ...a, status: 'completed' as const, updated_at: new Date().toISOString() }
+      }
+      return a
+    })
+
+    const newAssignment: MemberWorkoutAssignment = {
+      id: `mwa-${Date.now()}`,
+      member_id: member.id,
+      member_name: member.profile?.full_name || 'Member',
+      member_code: member.member_id,
+      member_phone: member.phone || member.profile?.phone || '',
+      workout_plan_id: plan.id,
+      workout_plan_name: plan.name,
+      plan_snapshot: planSnapshot,
+      trainer_id: params.trainer_id || plan.trainer_id || member.trainer_id || null,
+      trainer_name: params.trainer_name || plan.trainer_name || member.trainer_name || 'Coach Rohit Deshmukh',
+      assigned_by: params.assigned_by || 'Admin',
+      assigned_by_role: params.assigned_by_role || 'admin',
+      start_date: startDate,
+      end_date: endDate,
+      personal_instructions: params.personal_instructions || '',
+      status: 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    updated.unshift(newAssignment)
+    setItem(KEYS.WORKOUT_ASSIGNMENTS, updated)
+
+    // Notify member in app
+    try {
+      this.broadcastNotification({
+        title: 'New Workout Routine Assigned!',
+        message: `Routine "${plan.name}" (${durationWeeks} weeks) has been assigned to your dashboard by ${params.assigned_by || 'Admin'}.`,
+        type: 'success',
+        priority: 'high',
+        target_audience: 'active_members',
+        sent_by: params.assigned_by || 'Admin',
+      })
+    } catch {
+      // Ignored
+    }
+
+    // Add audit log
+    try {
+      const auditLogs = getItem<AuditLog[]>(KEYS.AUDIT_LOGS, [])
+      auditLogs.unshift({
+        id: `audit-${Date.now()}`,
+        user_id: params.trainer_id || 'admin-uuid',
+        user_name: params.assigned_by || 'Admin',
+        action: 'Assigned Workout Routine',
+        entity_type: 'member',
+        details: `Assigned routine "${plan.name}" to member ${member.profile?.full_name} (${member.member_id})`,
+        created_at: new Date().toISOString(),
+      })
+      setItem(KEYS.AUDIT_LOGS, auditLogs)
+    } catch {
+      // Ignored
+    }
+
+    return newAssignment
+  },
+
+  deleteWorkoutAssignment(id: string): void {
+    let assignments = this.getWorkoutAssignments()
+    assignments = assignments.filter((a) => a.id !== id)
+    setItem(KEYS.WORKOUT_ASSIGNMENTS, assignments)
+  },
+
   getWorkoutsForMember(memberId: string): {
     assignedPlan?: WorkoutPlan
+    activeAssignment?: MemberWorkoutAssignment | null
     customPlans: WorkoutPlan[]
     defaultPlans: WorkoutPlan[]
   } {
@@ -2768,18 +2940,26 @@ export const db = {
       return isCustomPlan && matchesMember
     })
 
-    const assignedPlan = all.find(
-      (w) =>
-        !w.is_default &&
-        !w.is_custom &&
-        (w.assigned_member_id === memberId ||
-          (member && (w.assigned_member_id === member.id || w.assigned_member_id === member.member_id)) ||
-          (w.trainer_name && member?.trainer_name && w.trainer_name === member.trainer_name) ||
-          (w.trainer_id && member?.trainer_id && w.trainer_id === member.trainer_id))
-    ) || (member?.trainer_name ? all.find((w) => !w.is_default && !w.is_custom) || all[0] : undefined)
+    // 1. Look up dedicated active assignment with immutable snapshot
+    const activeAssignment = this.getActiveWorkoutAssignment(memberId)
+    let assignedPlan: WorkoutPlan | undefined = activeAssignment?.plan_snapshot
+
+    // 2. Fallback to legacy assignment or first default plan
+    if (!assignedPlan) {
+      assignedPlan = all.find(
+        (w) =>
+          !w.is_default &&
+          !w.is_custom &&
+          (w.assigned_member_id === memberId ||
+            (member && (w.assigned_member_id === member.id || w.assigned_member_id === member.member_id)) ||
+            (w.trainer_name && member?.trainer_name && w.trainer_name === member.trainer_name) ||
+            (w.trainer_id && member?.trainer_id && w.trainer_id === member.trainer_id))
+      ) || defaultPlans[0]
+    }
 
     return {
       assignedPlan,
+      activeAssignment,
       customPlans,
       defaultPlans,
     }
@@ -2823,7 +3003,17 @@ export const db = {
     }
 
     if (memberId) {
-      return sanitized.filter((s) => s.member_id === memberId)
+      const member = this.getMemberById(memberId)
+      return sanitized.filter(
+        (s) =>
+          s.member_id === memberId ||
+          (member &&
+            (s.member_id === member.id ||
+              s.member_id === member.member_id ||
+              (s.member_name &&
+                member.profile?.full_name &&
+                s.member_name.toLowerCase() === member.profile.full_name.toLowerCase())))
+      )
     }
     return sanitized
   },

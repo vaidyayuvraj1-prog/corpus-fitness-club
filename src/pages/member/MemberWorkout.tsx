@@ -39,8 +39,17 @@ import type {
   ExerciseLibraryItem,
   WorkoutSession,
   WorkoutSetRecord,
+  MemberWorkoutAssignment,
 } from '@/types/database'
 import { format } from 'date-fns'
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from 'recharts'
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -53,6 +62,7 @@ export default function MemberWorkout() {
   const [defaultPlans, setDefaultPlans] = useState<WorkoutPlan[]>([])
   const [customPlans, setCustomPlans] = useState<WorkoutPlan[]>([])
   const [assignedPlan, setAssignedPlan] = useState<WorkoutPlan | null>(null)
+  const [activeAssignment, setActiveAssignment] = useState<MemberWorkoutAssignment | null>(null)
   const [selectedPlan, setSelectedPlan] = useState<WorkoutPlan | null>(null)
   const [selectedDayFilter, setSelectedDayFilter] = useState('All')
 
@@ -119,19 +129,31 @@ export default function MemberWorkout() {
   function loadData() {
     const allMembers = db.getMembers()
     const matched =
-      allMembers.find((m) => m.profile?.email === profile?.email || m.profile_id === profile?.id) ||
-      allMembers[0]
+      allMembers.find(
+        (m) =>
+          (profile?.email &&
+            (m.profile?.email?.toLowerCase() === profile.email.toLowerCase() ||
+              m.email?.toLowerCase() === profile.email.toLowerCase())) ||
+          (profile?.id && (m.profile_id === profile.id || m.id === profile.id)) ||
+          (profile?.full_name &&
+            m.profile?.full_name?.toLowerCase() === profile.full_name.toLowerCase())
+      ) || allMembers[0]
 
     setMember(matched)
     const exLib = db.getExerciseLibrary()
     setExerciseLibrary(exLib)
 
     if (matched) {
-      const { assignedPlan: assigned, customPlans: custom, defaultPlans: defaults } =
-        db.getWorkoutsForMember(matched.id)
+      const {
+        assignedPlan: assigned,
+        activeAssignment: assignment,
+        customPlans: custom,
+        defaultPlans: defaults,
+      } = db.getWorkoutsForMember(matched.id)
 
       setDefaultPlans(defaults)
       setCustomPlans(custom)
+      setActiveAssignment(assignment || null)
       setAssignedPlan(assigned || defaults[0] || null)
       setSelectedPlan(assigned || defaults[0] || null)
 
@@ -143,7 +165,7 @@ export default function MemberWorkout() {
   const hasTrainer = Boolean(member?.trainer_id && member.trainer_id !== 'none' && member?.trainer_name)
 
   // ── Live Session Helpers ───────────────────────────────────────────────────
-  const startLiveWorkout = (planToStart?: WorkoutPlan) => {
+  const startLiveWorkout = (planToStart?: WorkoutPlan, dayFilter?: string) => {
     const plan = planToStart || selectedPlan || defaultPlans[0]
     if (!plan) {
       toast.error('Please select a routine to start')
@@ -165,7 +187,7 @@ export default function MemberWorkout() {
       }[]
     }[] = []
 
-    const exercises =
+    let rawExercises =
       plan.exercises && plan.exercises.length > 0
         ? plan.exercises
         : db
@@ -183,6 +205,15 @@ export default function MemberWorkout() {
               day_of_week: 'General',
               instructions: item.instructions,
             }))
+
+    // Filter by day of week if specified
+    let exercises = rawExercises
+    if (dayFilter && dayFilter !== 'All') {
+      const dayFiltered = rawExercises.filter((e) => e.day_of_week === dayFilter)
+      if (dayFiltered.length > 0) {
+        exercises = dayFiltered
+      }
+    }
 
     exercises.forEach((ex) => {
       const numSets = Number(ex.sets) || 3
@@ -228,7 +259,11 @@ export default function MemberWorkout() {
     setTimerRunning(true)
     setSessionNotes('')
     setActiveTab('live_workout')
-    toast.success(`Live workout started: ${plan.name}`)
+    toast.success(
+      dayFilter && dayFilter !== 'All'
+        ? `Live workout started: ${plan.name} (${dayFilter})`
+        : `Live workout started: ${plan.name}`
+    )
   }
 
   // 100% Immutable toggle for React state reconciliation
@@ -947,6 +982,118 @@ export default function MemberWorkout() {
       {/* ──────────────────────────────────────────────────────────────────── */}
       {activeTab === 'routines' && (
         <div className="space-y-6">
+          {/* Active Assigned Program Highlight Banner */}
+          {activeAssignment && (
+            <div className="bg-gradient-to-br from-[#111111] via-[#1a1a1a] to-[#222222] text-white rounded-2xl p-6 border border-gray-800 shadow-xl relative overflow-hidden">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div className="space-y-3 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="bg-[#E50914] text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                      <Trophy className="w-3 h-3 text-amber-300" /> Assigned Routine
+                    </span>
+                    <span className="bg-white/10 text-gray-200 text-[10px] font-bold px-2 py-0.5 rounded">
+                      {activeAssignment.workout_plan_name}
+                    </span>
+                    <span className="bg-white/10 text-gray-300 text-[10px] font-mono px-2 py-0.5 rounded">
+                      {activeAssignment.start_date} → {activeAssignment.end_date}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h3 className="font-display text-2xl sm:text-3xl tracking-wider text-white">
+                      {activeAssignment.workout_plan_name}
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Prescribed by <strong className="text-white">{activeAssignment.trainer_name || 'Coach Rohit'}</strong> ·{' '}
+                      {activeAssignment.plan_snapshot.duration_weeks || 8} Weeks Protocol (
+                      {activeAssignment.plan_snapshot.days_per_week || 4} days/week)
+                    </p>
+                  </div>
+
+                  {activeAssignment.personal_instructions && (
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-gray-300 italic flex items-start gap-2.5">
+                      <MessageCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="text-amber-400 not-italic block text-[10px] uppercase font-bold">
+                          Trainer Personal Notes:
+                        </strong>
+                        "{activeAssignment.personal_instructions}"
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Today's Schedule Card */}
+                {(() => {
+                  const todayDayName = format(new Date(), 'EEEE')
+                  const todayExercises = (activeAssignment.plan_snapshot.exercises || []).filter(
+                    (e) => e.day_of_week === todayDayName
+                  )
+                  const isRestDay = todayExercises.length === 0
+
+                  return (
+                    <div className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-2xl p-5 min-w-[300px] space-y-3.5 shadow-inner">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-[#E50914]" /> Today ({todayDayName})
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                            isRestDay
+                              ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          }`}
+                        >
+                          {isRestDay ? 'Rest Day' : `${todayExercises.length} Exercises`}
+                        </span>
+                      </div>
+
+                      {isRestDay ? (
+                        <div className="text-xs text-gray-300 py-1">
+                          <p className="font-bold text-white mb-0.5 flex items-center gap-1">
+                            <Flame className="w-3.5 h-3.5 text-amber-400" /> Active Recovery
+                          </p>
+                          <p className="text-[11px] text-gray-400 leading-relaxed">
+                            No exercises scheduled for today. Hydrate, rest, and allow muscles to recover.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 py-1">
+                          {todayExercises.slice(0, 3).map((ex, i) => (
+                            <div key={i} className="text-xs text-gray-200 flex justify-between items-center">
+                              <span className="truncate max-w-[190px] font-medium">• {ex.name}</span>
+                              <span className="font-mono text-gray-400 text-[10px] bg-black/30 px-1.5 py-0.5 rounded">
+                                {ex.sets}×{ex.reps}
+                              </span>
+                            </div>
+                          ))}
+                          {todayExercises.length > 3 && (
+                            <p className="text-[10px] text-gray-400 italic">
+                              + {todayExercises.length - 3} more exercises scheduled
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() =>
+                          startLiveWorkout(
+                            activeAssignment.plan_snapshot,
+                            isRestDay ? 'All' : todayDayName
+                          )
+                        }
+                        className="w-full py-2.5 rounded-xl bg-[#E50914] text-white text-xs font-bold hover:bg-[#B91C1C] transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg cursor-pointer"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-white" />
+                        <span>{isRestDay ? 'Start Workout Routine' : `Start Today's Workout (${todayDayName})`}</span>
+                      </button>
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+          )}
+
           {/* Plan Selector Pills */}
           <div className="space-y-2">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
@@ -1023,18 +1170,24 @@ export default function MemberWorkout() {
                   </button>
 
                   <button
-                    onClick={() => startLiveWorkout(selectedPlan)}
+                    onClick={() => startLiveWorkout(selectedPlan, selectedDayFilter)}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#E50914] text-white text-xs font-bold hover:bg-[#B91C1C] transition-colors cursor-pointer shadow-xs"
                   >
                     <Play className="w-3.5 h-3.5 fill-white" />
-                    <span>Start This Workout</span>
+                    <span>
+                      {selectedDayFilter === 'All'
+                        ? 'Start Routine'
+                        : `Start ${selectedDayFilter} Workout`}
+                    </span>
                   </button>
                 </div>
               </div>
 
               {/* Day of Week Filter */}
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Filter by Day:</span>
+                <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  Filter by Day:
+                </span>
                 <div className="flex flex-wrap gap-1.5">
                   {['All', ...DAYS_OF_WEEK].map((d) => (
                     <button
@@ -1054,9 +1207,26 @@ export default function MemberWorkout() {
 
               {/* Exercise Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {(selectedPlan.exercises || [])
-                  .filter((ex) => selectedDayFilter === 'All' || ex.day_of_week === selectedDayFilter)
-                  .map((ex, idx) => (
+                {(() => {
+                  const filtered = (selectedPlan.exercises || []).filter(
+                    (ex) => selectedDayFilter === 'All' || ex.day_of_week === selectedDayFilter
+                  )
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="col-span-full p-10 text-center text-gray-400 bg-[#F8FAFC] border border-gray-200 rounded-xl space-y-2">
+                        <Flame className="w-8 h-8 text-amber-500 mx-auto" />
+                        <h4 className="font-bold text-gray-700 text-sm">
+                          Scheduled Rest Day ({selectedDayFilter})
+                        </h4>
+                        <p className="text-xs text-gray-400 max-w-md mx-auto">
+                          No exercises prescribed for {selectedDayFilter} in this routine. Hydrate, focus on recovery, and let muscles rebuild stronger.
+                        </p>
+                      </div>
+                    )
+                  }
+
+                  return filtered.map((ex, idx) => (
                     <div
                       key={idx}
                       className="bg-[#F8FAFC] border border-gray-200 rounded-xl p-5 hover:border-[#E50914]/40 transition-all flex flex-col justify-between"
@@ -1071,15 +1241,22 @@ export default function MemberWorkout() {
                           </span>
                         </div>
                         <h4 className="font-bold text-base text-[#111111] mb-2">{ex.name}</h4>
-                        <p className="text-xs text-gray-600 leading-relaxed mb-4">{ex.instructions}</p>
+                        <p className="text-xs text-gray-600 leading-relaxed mb-4">
+                          {ex.instructions}
+                        </p>
                       </div>
 
                       <div className="pt-3 border-t border-gray-200/60 flex items-center justify-between text-[11px] text-gray-500 font-mono">
-                        <span>Target: <strong>{ex.weight || 'Moderate'}</strong></span>
-                        <span>Rest: <strong>{ex.rest_seconds}s</strong></span>
+                        <span>
+                          Target: <strong>{ex.weight || 'Moderate'}</strong>
+                        </span>
+                        <span>
+                          Rest: <strong>{ex.rest_seconds}s</strong>
+                        </span>
                       </div>
                     </div>
-                  ))}
+                  ))
+                })()}
               </div>
             </div>
           )}
@@ -1518,23 +1695,204 @@ export default function MemberWorkout() {
       )}
 
       {/* ──────────────────────────────────────────────────────────────────── */}
-      {/* TAB 4: WORKOUT HISTORY LOG                                           */}
+      {/* TAB 4: WORKOUT HISTORY & PROGRESS TRACKING                            */}
       {/* ──────────────────────────────────────────────────────────────────── */}
       {activeTab === 'history' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2 border-b border-gray-100">
             <div>
-              <h3 className="font-display text-xl tracking-wider text-[#111111] uppercase">
-                Completed Workout History
+              <h3 className="font-display text-xl tracking-wider text-[#111111] uppercase flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-[#E50914]" /> Workout History & Progress Tracking
               </h3>
               <p className="text-xs text-gray-500">
-                Log of all past workouts, completed sets, reps, and tonnage lifted
+                Log of completed workouts, volume progression, personal records, and consistency
               </p>
             </div>
-            <span className="text-xs font-bold text-gray-600 font-mono">
-              Total Sessions: {pastSessions.length}
+            <span className="text-xs font-bold text-gray-700 bg-gray-100 px-3 py-1 rounded-lg font-mono">
+              Total Logged: <strong>{pastSessions.length}</strong> Sessions
             </span>
           </div>
+
+          {/* Progress Analytics Summary Bar */}
+          {(() => {
+            const allTimeVolume = pastSessions.reduce(
+              (sum, ws) =>
+                sum +
+                ws.completed_sets.reduce(
+                  (sSum, s) => sSum + (s.completed ? s.weight_kg * s.reps : 0),
+                  0
+                ),
+              0
+            )
+
+            const allTimeSets = pastSessions.reduce(
+              (sum, ws) => sum + ws.completed_sets.filter((s) => s.completed).length,
+              0
+            )
+
+            const totalMins = pastSessions.reduce(
+              (sum, ws) => sum + (ws.duration_minutes || 0),
+              0
+            )
+
+            // Weekly sessions (sessions within past 7 days)
+            const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+            const thisWeekSessions = pastSessions.filter((ws) => new Date(ws.date) >= oneWeekAgo)
+            const targetDays = assignedPlan?.days_per_week || 4
+            const weeklyPct = Math.min(100, Math.round((thisWeekSessions.length / targetDays) * 100))
+
+            // Calculate Personal Records (PRs)
+            const prMap: Record<string, { maxWeight: number; reps: number; date: string }> = {}
+            pastSessions.forEach((ws) => {
+              ws.completed_sets.forEach((s) => {
+                if (s.completed && s.weight_kg > 0) {
+                  const existing = prMap[s.exercise_name]
+                  if (!existing || s.weight_kg > existing.maxWeight) {
+                    prMap[s.exercise_name] = {
+                      maxWeight: s.weight_kg,
+                      reps: s.reps,
+                      date: ws.date,
+                    }
+                  }
+                }
+              })
+            })
+            const topPRs = Object.entries(prMap).slice(0, 4)
+
+            // Volume Chart Data (Past 7 sessions)
+            const chartData = pastSessions
+              .slice(0, 7)
+              .reverse()
+              .map((ws) => ({
+                date: ws.date.slice(5),
+                volume: ws.completed_sets.reduce(
+                  (sum, s) => sum + (s.completed ? s.weight_kg * s.reps : 0),
+                  0
+                ),
+                duration: ws.duration_minutes || 45,
+              }))
+
+            return (
+              <div className="space-y-6">
+                {/* 4 Metric Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-xs">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                      Weekly Consistency
+                    </span>
+                    <p className="text-2xl font-bold font-display text-emerald-600 mt-1">
+                      {thisWeekSessions.length} / {targetDays} <span className="text-xs font-normal text-gray-500">Days</span>
+                    </p>
+                    <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2 overflow-hidden">
+                      <div
+                        className="bg-emerald-500 h-1.5 rounded-full transition-all"
+                        style={{ width: `${weeklyPct}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-xs">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                      Total Volume Lifted
+                    </span>
+                    <p className="text-2xl font-bold font-display text-[#E50914] mt-1">
+                      {allTimeVolume.toLocaleString()} <span className="text-xs font-normal text-gray-500">kg</span>
+                    </p>
+                    <span className="text-[10px] text-gray-400 font-medium">All sessions tonnage</span>
+                  </div>
+
+                  <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-xs">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                      Sets Completed
+                    </span>
+                    <p className="text-2xl font-bold font-display text-gray-900 mt-1">
+                      {allTimeSets} <span className="text-xs font-normal text-gray-500">sets</span>
+                    </p>
+                    <span className="text-[10px] text-gray-400 font-medium">100% audited reps</span>
+                  </div>
+
+                  <div className="bg-white border border-[#E5E7EB] rounded-2xl p-4 shadow-xs">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                      Time on Floor
+                    </span>
+                    <p className="text-2xl font-bold font-display text-blue-600 mt-1">
+                      {totalMins} <span className="text-xs font-normal text-gray-500">mins</span>
+                    </p>
+                    <span className="text-[10px] text-gray-400 font-medium">Total training duration</span>
+                  </div>
+                </div>
+
+                {/* Volume Progression Chart & Personal Records */}
+                {chartData.length > 0 && (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {/* Bar Chart */}
+                    <div className="lg:col-span-2 bg-white border border-[#E5E7EB] rounded-2xl p-5 shadow-xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-gray-900 flex items-center gap-1.5">
+                            <Activity className="w-3.5 h-3.5 text-[#E50914]" /> Volume Progression (kg)
+                          </h4>
+                          <p className="text-[10px] text-gray-400">Total volume lifted per workout session</p>
+                        </div>
+                      </div>
+
+                      <div className="h-44 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#9CA3AF" />
+                            <YAxis tick={{ fontSize: 10 }} stroke="#9CA3AF" />
+                            <Tooltip
+                              formatter={(value: any) => [`${Number(value).toLocaleString()} kg`, 'Volume']}
+                              contentStyle={{
+                                backgroundColor: '#111111',
+                                border: 'none',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '11px',
+                              }}
+                            />
+                            <Bar dataKey="volume" fill="#E50914" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* PRs Leaderboard */}
+                    <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5 shadow-xs space-y-3">
+                      <h4 className="font-bold text-xs uppercase tracking-wider text-gray-900 flex items-center gap-1.5">
+                        <Flame className="w-3.5 h-3.5 text-amber-500" /> Personal Records (PRs)
+                      </h4>
+                      <p className="text-[10px] text-gray-400">Heaviest successful lifts recorded</p>
+
+                      <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                        {topPRs.map(([name, data], idx) => (
+                          <div
+                            key={idx}
+                            className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-between"
+                          >
+                            <div>
+                              <p className="font-bold text-xs text-gray-900 truncate max-w-[130px]">
+                                {name}
+                              </p>
+                              <span className="text-[9px] text-gray-400">{data.date}</span>
+                            </div>
+                            <span className="font-mono text-xs font-bold text-[#E50914] bg-red-50 px-2 py-0.5 rounded">
+                              {data.maxWeight} kg
+                            </span>
+                          </div>
+                        ))}
+                        {topPRs.length === 0 && (
+                          <div className="p-4 text-center text-gray-400 text-[11px]">
+                            Log workouts to establish personal records.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {pastSessions.length > 0 ? (
             <div className="space-y-4">
