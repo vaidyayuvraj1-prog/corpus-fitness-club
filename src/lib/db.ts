@@ -98,6 +98,154 @@ function setLocalSeed<T>(key: string, val: T): void {
 }
 
 // ── Multi-Device Real-Time Sync Engine ───────────────────────────────────────
+async function syncRelationalTable(key: string, value: any): Promise<void> {
+  if (!isSupabaseConfigured || !supabase || !value) return
+  try {
+    if (key === KEYS.MEMBERS && Array.isArray(value)) {
+      const cleanMembers = value.filter(
+        (m) =>
+          m &&
+          !FAKE_MEMBER_IDS.has(m?.id) &&
+          !FAKE_MEMBER_EMAILS.has((m?.email || '').toLowerCase()) &&
+          !FAKE_MEMBER_EMAILS.has((m?.profile?.email || '').toLowerCase())
+      )
+      const rows = cleanMembers.map((m: any) => ({
+        id: m.id,
+        member_id: m.member_id || `CFC-2026-${m.id}`,
+        gender: m.gender || 'male',
+        date_of_birth: m.date_of_birth || null,
+        address: m.address || null,
+        phone: m.phone || m.profile?.phone || null,
+        email: m.email || m.profile?.email || null,
+        fitness_goal: m.fitness_goal || null,
+        status: m.status || 'active',
+        current_plan_id: m.current_plan_id || null,
+        trainer_id: m.trainer_id || null,
+        trainer_name: m.trainer_name || null,
+        pt_status: m.pt_status || 'general_floor',
+        pt_package: m.pt_package || null,
+        photo_url: m.photo_url || m.profile?.avatar_url || null,
+        password: m.password || 'CFC@2026',
+        notes: m.notes || null,
+        updated_at: new Date().toISOString(),
+      }))
+      if (rows.length > 0) {
+        await supabase.from('members').upsert(rows)
+      }
+    } else if (key === KEYS.PLANS && Array.isArray(value)) {
+      const rows = value.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        duration_type: p.duration_type || `${p.duration_months || 1} Month`,
+        duration_months: p.duration_months || 1,
+        price_men: p.price_men || 0,
+        price_women: p.price_women || 0,
+        price: p.price || 0,
+        description: p.description || '',
+        features: p.features || [],
+        popular: !!p.popular,
+        is_active: p.is_active !== false,
+      }))
+      if (rows.length > 0) {
+        await supabase.from('membership_plans').upsert(rows)
+      }
+    } else if (key === KEYS.ADMIN_PROFILE && value) {
+      await supabase.from('admin_profile').upsert({
+        id: 'admin-director-root',
+        full_name: value.full_name || 'Yuvraj Vaidya (Director)',
+        email: value.email || 'admin@corpuss.com',
+        phone: value.phone || '+91 76206 83995',
+        role: 'super_admin',
+        avatar_url: value.avatar_url || null,
+        password: value.password || 'Admin@2026',
+        updated_at: new Date().toISOString(),
+      })
+    } else if (key === KEYS.WORKOUTS && Array.isArray(value)) {
+      const plans = value.map((w: any) => ({
+        id: w.id,
+        name: w.name,
+        category: w.category,
+        level: w.level || 'beginner',
+        description: w.description || '',
+        trainer_name: w.trainer_name || null,
+        is_active: w.is_active !== false,
+        is_default: !!w.is_default,
+        is_custom: !!w.is_custom,
+        created_by_role: w.created_by_role || 'admin',
+        duration_weeks: w.duration_weeks || 8,
+        days_per_week: w.days_per_week || 4,
+        updated_at: new Date().toISOString(),
+      }))
+      if (plans.length > 0) {
+        await supabase.from('workout_plans').upsert(plans)
+      }
+      const allExercises: any[] = []
+      value.forEach((w: any) => {
+        if (Array.isArray(w.exercises)) {
+          w.exercises.forEach((ex: any) => {
+            allExercises.push({
+              id: ex.id,
+              plan_id: w.id,
+              name: ex.name,
+              muscle_group: ex.muscle_group,
+              sets: ex.sets || 3,
+              reps: String(ex.reps || '10 - 12'),
+              weight: ex.weight || 'Bodyweight',
+              rest_seconds: ex.rest_seconds || 60,
+              day_of_week: ex.day_of_week || 'Monday',
+              instructions: ex.instructions || '',
+            })
+          })
+        }
+      })
+      if (allExercises.length > 0) {
+        await supabase.from('workout_exercises').upsert(allExercises)
+      }
+    } else if (key === KEYS.WORKOUT_ASSIGNMENTS && Array.isArray(value)) {
+      const rows = value.map((a: any) => ({
+        id: a.id,
+        member_id: a.member_id,
+        member_name: a.member_name,
+        member_code: a.member_code,
+        member_phone: a.member_phone || null,
+        workout_plan_id: a.workout_plan_id || null,
+        workout_plan_name: a.workout_plan_name,
+        plan_snapshot: a.plan_snapshot || {},
+        trainer_id: a.trainer_id || null,
+        trainer_name: a.trainer_name || null,
+        assigned_by: a.assigned_by || 'Admin Director',
+        assigned_by_role: a.assigned_by_role || 'admin',
+        start_date: a.start_date,
+        end_date: a.end_date,
+        personal_instructions: a.personal_instructions || null,
+        status: a.status || 'active',
+        updated_at: new Date().toISOString(),
+      }))
+      if (rows.length > 0) {
+        await supabase.from('member_workout_assignments').upsert(rows)
+      }
+    } else if (key === KEYS.NOTIFICATIONS && Array.isArray(value)) {
+      const rows = value.map((n: any) => ({
+        id: n.id,
+        user_id: n.user_id || null,
+        title: n.title,
+        message: n.message,
+        type: n.type || 'info',
+        is_read: !!(n.is_read || n.read),
+        target_audience: n.target_audience || 'all',
+        sent_by: n.sent_by || 'Admin Director',
+        priority: n.priority || 'normal',
+        channels: n.channels || ['in_app'],
+      }))
+      if (rows.length > 0) {
+        await supabase.from('notifications').upsert(rows)
+      }
+    }
+  } catch (err) {
+    console.warn('Relational sync notice for key:', key, err)
+  }
+}
+
 async function syncKeyToServer(key: string, value: any): Promise<void> {
   if (typeof window === 'undefined') return
 
@@ -107,6 +255,7 @@ async function syncKeyToServer(key: string, value: any): Promise<void> {
       await supabase
         .from('cfc_store')
         .upsert({ key, data: value, updated_at: new Date().toISOString() })
+      syncRelationalTable(key, value)
     } catch {
       // Handled silently
     }
@@ -133,6 +282,27 @@ export async function syncDatabaseWithServer(): Promise<void> {
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.from('cfc_store').select('*')
+        if (!error && (!data || data.length === 0)) {
+          // cfc_store is newly created and empty: push initial clean data from local
+          seedDatabase()
+          const rowsToPush: { key: string; data: any; updated_at: string }[] = []
+          Object.values(KEYS).forEach((k) => {
+            const raw = localStorage.getItem(k)
+            if (raw) {
+              try {
+                const parsed = JSON.parse(raw)
+                rowsToPush.push({ key: k, data: parsed, updated_at: new Date().toISOString() })
+                syncRelationalTable(k, parsed)
+              } catch {
+                rowsToPush.push({ key: k, data: raw, updated_at: new Date().toISOString() })
+              }
+            }
+          })
+          if (rowsToPush.length > 0) {
+            await supabase.from('cfc_store').upsert(rowsToPush)
+          }
+          return
+        }
         if (!error && data && data.length > 0) {
           let hasNewer = false
           const fetchedKeys = new Set<string>()
