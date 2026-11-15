@@ -102,9 +102,9 @@ export default function LoginPage() {
           <ShieldCheck className="h-5 w-5 text-[#E50914] shrink-0 mt-0.5" />
           <div className="text-[11px] text-red-950 leading-relaxed">
             <strong className="text-[#E50914] block mb-0.5 uppercase tracking-wide">
-              Official Admin-Issued Login Only
+              Official Gym Credentials
             </strong>
-            Clients do not use personal email. Enter the official <strong>@corpuss.com</strong> email and password issued to you by the Gym Admin upon enrollment (or your Member ID e.g. <strong>CFC-2026-0001</strong>).
+            Enter your official <strong>@corpuss.com</strong> email and default password (<strong>2026@cfc</strong>) or Member ID (e.g. <strong>CFC-2026-0001</strong>). Admin login: <strong>admin@corpuss.com</strong>.
           </div>
         </div>
 

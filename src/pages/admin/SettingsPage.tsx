@@ -445,7 +445,7 @@ export default function SettingsPage() {
               <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
                 {localStorage.getItem('cfc_admin_password')
                   ? '🔒 Custom Password Active'
-                  : '🔑 Default Key (Admin@2026)'}
+                  : '🔑 Default Key (2026@admin)'}
               </span>
             </div>
 

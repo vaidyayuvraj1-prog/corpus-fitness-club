@@ -72,7 +72,7 @@ export default function MembersPage() {
     full_name: '',
     phone: '',
     email: '',
-    password: 'CFC@2026',
+    password: '2026@cfc',
     gender: 'male' as 'male' | 'female' | 'other',
     date_of_birth: '1998-05-15',
     address: '',
@@ -149,7 +149,7 @@ export default function MembersPage() {
       full_name: '',
       phone: '',
       email: '',
-      password: generateCorpussPassword(),
+      password: '2026@cfc',
       gender: 'male',
       date_of_birth: '1998-05-15',
       address: 'Harshraj Colony, Amravati',
@@ -172,7 +172,7 @@ export default function MembersPage() {
       full_name: m.profile?.full_name || '',
       phone: m.profile?.phone || '',
       email: m.email || m.profile?.email || '',
-      password: m.password || 'CFC@2026',
+      password: m.password || '2026@cfc',
       gender: m.gender,
       date_of_birth: m.date_of_birth,
       address: m.address,
@@ -232,7 +232,7 @@ export default function MembersPage() {
       return
     }
 
-    const assignedPassword = formData.password?.trim() || generateCorpussPassword()
+    const assignedPassword = formData.password?.trim() || '2026@cfc'
 
     try {
       if (editMember) {
@@ -759,24 +759,24 @@ export default function MembersPage() {
                         onClick={() =>
                           setFormData({
                             ...formData,
-                            password: generateCorpussPassword(),
+                            password: '2026@cfc',
                           })
                         }
-                        className="text-[10px] text-[#E50914] font-bold hover:underline cursor-pointer"
+                        className="text-[10px] text-emerald-700 font-bold hover:underline cursor-pointer"
                       >
-                        Auto-Generate
+                        Reset Default (2026@cfc)
                       </button>
                     </div>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. CFC@7842"
+                      placeholder="Default: 2026@cfc"
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       className="input-field font-mono font-bold"
                     />
                     <p className="text-[10px] text-gray-500 mt-0.5">
-                      Admin yeh password create karke member ko login ke liye dega.
+                      Default password <strong>2026@cfc</strong> rahega. Member ise portal se change kar sakta hai.
                     </p>
                   </div>
 
@@ -1032,9 +1032,9 @@ export default function MembersPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
           >
-            <div className="bg-white rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-gray-200">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto">
               <div className="text-center mb-6">
                 <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-3">
                   <CheckCircle2 className="w-7 h-7" />
@@ -1066,12 +1066,12 @@ export default function MembersPage() {
                 <div className="flex justify-between items-center pb-2 border-b border-gray-200">
                   <span className="text-gray-500 font-semibold uppercase text-[10px]">Assigned Password</span>
                   <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                    {registeredCredentials.password || 'CFC@2026'}
+                    {registeredCredentials.password || '2026@cfc'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center pt-1 text-[11px]">
                   <span className="text-gray-500">Default Password</span>
-                  <span className="text-emerald-700 font-bold font-mono">CFC@2026</span>
+                  <span className="text-emerald-700 font-bold font-mono">2026@cfc</span>
                 </div>
               </div>
 
@@ -1079,8 +1079,9 @@ export default function MembersPage() {
               <div className="space-y-2">
                 <button
                   onClick={() => {
-                    const pass = registeredCredentials.password || 'CFC@2026'
-                    const text = `*CORPUS FITNESS CLUB (CFC) - Member Portal Access*\n\nHello ${registeredCredentials.name},\nWelcome to Corpus Fitness Club, Amravati!\n\nYour Member ID: *${registeredCredentials.member_id}*\nLogin Email: *${registeredCredentials.email}*\nLogin Password: *${pass}* (Default: CFC@2026)\n\nFor any help, contact front desk: +91 76206 83995.`
+                    const pass = registeredCredentials.password || '2026@cfc'
+                    const portalUrl = window.location.origin + '/login'
+                    const text = `*CORPUS FITNESS CLUB (CFC) - Member Portal Access*\n\nHello ${registeredCredentials.name},\nWelcome to Corpus Fitness Club, Amravati!\n\nYour login credentials for the Member Portal:\n• Member ID: *${registeredCredentials.member_id}*\n• Official Email: *${registeredCredentials.email}*\n• Login Password: *${pass}* (Default: 2026@cfc)\n• Portal Link: ${portalUrl}\n\nPlease login to access your workout schedules, diet plans, and view your digital gym pass.\n\nFront Desk: +91 76206 83995`
                     const cleanPhone = registeredCredentials.phone.replace(/[^0-9]/g, '')
                     window.open(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank')
                   }}
@@ -1091,8 +1092,9 @@ export default function MembersPage() {
 
                 <button
                   onClick={() => {
-                    const pass = registeredCredentials.password || 'CFC@2026'
-                    const text = `CORPUS FITNESS CLUB (CFC)\nMember: ${registeredCredentials.name}\nMember ID: ${registeredCredentials.member_id}\nEmail: ${registeredCredentials.email}\nPassword: ${pass} (Default: CFC@2026)`
+                    const pass = registeredCredentials.password || '2026@cfc'
+                    const portalUrl = window.location.origin + '/login'
+                    const text = `CORPUS FITNESS CLUB (CFC)\nMember: ${registeredCredentials.name}\nMember ID: ${registeredCredentials.member_id}\nEmail: ${registeredCredentials.email}\nPassword: ${pass} (Default: 2026@cfc)\nPortal: ${portalUrl}`
                     navigator.clipboard.writeText(text)
                     toast.success('Credentials copied to clipboard!')
                   }}
@@ -1116,12 +1118,12 @@ export default function MembersPage() {
       {/* ── DEDICATED VIEW / RESET MEMBER CREDENTIALS MODAL ─────────── */}
       <AnimatePresence>
         {credentialsModalMember && (
-          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200"
+              className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
                 <div className="flex items-center gap-2">
@@ -1177,7 +1179,7 @@ export default function MembersPage() {
                   <span className="text-gray-500 font-semibold uppercase text-[10px]">Current Password</span>
                   <div className="flex items-center gap-1.5">
                     <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                      {showModalPassword ? credentialsModalMember.password || 'CFC@2026' : '••••••••'}
+                      {showModalPassword ? credentialsModalMember.password || '2026@cfc' : '••••••••'}
                     </span>
                     <button
                       onClick={() => setShowModalPassword(!showModalPassword)}
@@ -1188,7 +1190,7 @@ export default function MembersPage() {
                     </button>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(credentialsModalMember.password || 'CFC@2026')
+                        navigator.clipboard.writeText(credentialsModalMember.password || '2026@cfc')
                         toast.success('Password copied!')
                       }}
                       className="p-1 text-gray-400 hover:text-black"
@@ -1208,23 +1210,23 @@ export default function MembersPage() {
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="Enter new password (e.g. CFC@9021)"
+                    placeholder="Enter new password (Default: 2026@cfc)"
                     value={newPasswordInput}
                     onChange={(e) => setNewPasswordInput(e.target.value)}
                     className="flex-1 px-3 py-1.5 text-xs font-mono font-bold bg-white border border-amber-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
                   />
                   <button
                     type="button"
-                    onClick={() => setNewPasswordInput(generateCorpussPassword())}
-                    className="px-2 py-1.5 text-[11px] font-bold bg-white hover:bg-amber-100 border border-amber-300 rounded-lg text-amber-900"
-                    title="Generate Random"
+                    onClick={() => setNewPasswordInput('2026@cfc')}
+                    className="px-2.5 py-1.5 text-[11px] font-bold bg-white hover:bg-amber-100 border border-amber-300 rounded-lg text-amber-900 cursor-pointer"
+                    title="Set to Default (2026@cfc)"
                   >
-                    Random
+                    Default
                   </button>
                   <button
                     type="button"
                     onClick={() => handleResetMemberPassword(newPasswordInput)}
-                    className="px-3 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors"
+                    className="px-3 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors cursor-pointer"
                   >
                     Save
                   </button>
@@ -1235,8 +1237,9 @@ export default function MembersPage() {
               <div className="space-y-2">
                 <button
                   onClick={() => {
-                    const pass = credentialsModalMember.password || 'CFC@2026'
-                    const text = `*CORPUS FITNESS CLUB (CFC) - Official Portal Credentials*\n\nHello ${credentialsModalMember.profile?.full_name},\nHere are your gym login details:\n\n• Member ID: *${credentialsModalMember.member_id}*\n• Official Email: *${credentialsModalMember.email || credentialsModalMember.profile?.email}*\n• Password: *${pass}* (Default: CFC@2026)\n\nFor assistance, contact front desk: +91 76206 83995.`
+                    const pass = credentialsModalMember.password || '2026@cfc'
+                    const portalUrl = window.location.origin + '/login'
+                    const text = `*CORPUS FITNESS CLUB (CFC) - Official Portal Credentials*\n\nHello ${credentialsModalMember.profile?.full_name},\nHere are your gym login details for Corpus Fitness Club:\n\n• Member ID: *${credentialsModalMember.member_id}*\n• Official Email: *${credentialsModalMember.email || credentialsModalMember.profile?.email}*\n• Password: *${pass}* (Default: 2026@cfc)\n• Portal Link: ${portalUrl}\n\nFor assistance, contact front desk: +91 76206 83995.`
                     const cleanPhone = (credentialsModalMember.profile?.phone || credentialsModalMember.emergency_phone || '').replace(/[^0-9]/g, '')
                     window.open(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank')
                   }}
@@ -1247,8 +1250,9 @@ export default function MembersPage() {
 
                 <button
                   onClick={() => {
-                    const pass = credentialsModalMember.password || 'CFC@2026'
-                    const text = `CORPUS FITNESS CLUB (CFC)\nMember: ${credentialsModalMember.profile?.full_name}\nMember ID: ${credentialsModalMember.member_id}\nEmail: ${credentialsModalMember.email || credentialsModalMember.profile?.email}\nPassword: ${pass} (Default: CFC@2026)`
+                    const pass = credentialsModalMember.password || '2026@cfc'
+                    const portalUrl = window.location.origin + '/login'
+                    const text = `CORPUS FITNESS CLUB (CFC)\nMember: ${credentialsModalMember.profile?.full_name}\nMember ID: ${credentialsModalMember.member_id}\nEmail: ${credentialsModalMember.email || credentialsModalMember.profile?.email}\nPassword: ${pass} (Default: 2026@cfc)\nPortal: ${portalUrl}`
                     navigator.clipboard.writeText(text)
                     toast.success('Credentials copied to clipboard!')
                   }}

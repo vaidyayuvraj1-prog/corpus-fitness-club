@@ -22,9 +22,9 @@ interface AuthState {
 const DEMO_PROFILES: Record<UserRole, Profile> = {
   super_admin: {
     id: 'super-admin-uuid',
-    full_name: 'Corpus Club Director',
+    full_name: 'Yuvraj Vaidya (Director & Admin)',
     phone: '+91 76206 83995',
-    email: 'superadmin@corpuss.com',
+    email: 'admin@corpuss.com',
     role: 'super_admin',
     avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
     created_at: new Date().toISOString(),
@@ -32,17 +32,17 @@ const DEMO_PROFILES: Record<UserRole, Profile> = {
   },
   admin: {
     id: 'admin-uuid',
-    full_name: 'CFC Gym Manager',
+    full_name: 'Yuvraj Vaidya (Director & Admin)',
     phone: '+91 76206 83995',
     email: 'admin@corpuss.com',
-    role: 'admin',
+    role: 'super_admin',
     avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   },
   receptionist: {
     id: 'reception-uuid',
-    full_name: 'Pooja (Front Desk Officer)',
+    full_name: 'Front Desk Officer',
     phone: '+91 76206 83995',
     email: 'reception@corpuss.com',
     role: 'receptionist',
@@ -129,46 +129,35 @@ export const useAuthStore = create<AuthState>()(
         }
       }
 
-      // 1. Staff & Admin Accounts
+      // 1. Staff & Admin Accounts (Strictly admin@corpuss.com with master password 2026@admin)
       if (
-        normalizedInput.includes('superadmin') ||
-        normalizedInput.includes('director') ||
-        normalizedInput.includes('admin') ||
-        normalizedInput.includes('manager') ||
+        normalizedInput === 'admin@corpuss.com' ||
+        normalizedInput === 'admin' ||
+        normalizedInput === 'superadmin@corpuss.com' ||
+        normalizedInput === 'superadmin' ||
         normalizedInput.includes('reception') ||
-        normalizedInput.includes('desk') ||
-        normalizedInput === 'yuvraj@corpuss.com' ||
-        normalizedInput === 'yuvraj'
+        normalizedInput.includes('desk')
       ) {
         let assignedRole: UserRole = 'super_admin'
         if (normalizedInput.includes('reception') || normalizedInput.includes('desk')) {
           assignedRole = 'receptionist'
-        } else if (normalizedInput.includes('admin') || normalizedInput.includes('manager')) {
-          assignedRole = 'admin'
-        } else if (normalizedInput.includes('superadmin') || normalizedInput.includes('director') || normalizedInput.includes('yuvraj')) {
+        } else {
           assignedRole = 'super_admin'
         }
 
-        const expectedAdminPwd = db.getAdminPassword()
+        const expectedAdminPwd = db.getAdminPassword() || '2026@admin'
         const isAdminPwdValid =
-          !inputPwd ||
           inputPwd === expectedAdminPwd ||
           inputPwd.toLowerCase() === expectedAdminPwd.toLowerCase() ||
+          inputPwd === '2026@admin' ||
+          inputPwd.toLowerCase() === '2026@admin' ||
           inputPwd === 'Admin@2026' ||
-          inputPwd.toLowerCase() === 'admin@2026' ||
-          inputPwd === 'CFC@Admin2026' ||
-          inputPwd.toLowerCase() === 'cfc@admin2026' ||
-          inputPwd === 'CFC@2026' ||
-          inputPwd.toLowerCase() === 'cfc@2026' ||
-          inputPwd === 'admin123' ||
-          inputPwd === 'password123' ||
-          inputPwd.toLowerCase() === 'yuvraj' ||
-          inputPwd.toLowerCase() === 'yuvraj123'
+          inputPwd.toLowerCase() === 'admin@2026'
 
         if (!isAdminPwdValid) {
           set({ loading: false })
           return {
-            error: `Incorrect password for ${emailOrId}. Default: Admin@2026 or CFC@2026.`,
+            error: `Incorrect password for Admin. Master key required (Default: 2026@admin).`,
           }
         }
 
@@ -176,6 +165,7 @@ export const useAuthStore = create<AuthState>()(
         const prof: Profile = {
           ...DEMO_PROFILES[assignedRole],
           ...savedAdmin,
+          email: 'admin@corpuss.com',
           role: assignedRole,
         }
 
@@ -204,20 +194,19 @@ export const useAuthStore = create<AuthState>()(
       })
 
       if (trainer) {
-        const expectedPwd = (trainer.password || 'CFC@TRN2026').trim()
+        const expectedPwd = (trainer.password || '2026@cfc').trim()
         const isTrainerPwdValid =
-          !inputPwd ||
           inputPwd === expectedPwd ||
           inputPwd.toLowerCase() === expectedPwd.toLowerCase() ||
+          inputPwd === '2026@cfc' ||
+          inputPwd.toLowerCase() === '2026@cfc' ||
           inputPwd === 'password123' ||
-          inputPwd.toLowerCase() === 'password123' ||
-          inputPwd === 'CFC@TRN2026' ||
-          inputPwd.toLowerCase() === 'cfc@trn2026'
+          inputPwd === 'CFC@TRN2026'
 
         if (!isTrainerPwdValid) {
           set({ loading: false })
           return {
-            error: `Incorrect password for Coach ${trainer.name}. Please enter the password provided by Admin (Default: ${expectedPwd}).`,
+            error: `Incorrect password for Coach ${trainer.name}. Please enter the default password (2026@cfc) or assigned password.`,
           }
         }
 
@@ -279,27 +268,21 @@ export const useAuthStore = create<AuthState>()(
         }
       }
 
-      // Robust Password Verification
-      const expectedPassword = (member.password || 'CFC@2026').trim()
+      // Robust Password Verification (Default: 2026@cfc)
+      const expectedPassword = (member.password || '2026@cfc').trim()
       const isMemberPwdValid =
-        !inputPwd ||
         inputPwd === expectedPassword ||
         inputPwd.toLowerCase() === expectedPassword.toLowerCase() ||
-        inputPwd === 'password123' ||
-        inputPwd.toLowerCase() === 'password123' ||
+        inputPwd === '2026@cfc' ||
+        inputPwd.toLowerCase() === '2026@cfc' ||
         inputPwd === 'CFC@2026' ||
         inputPwd.toLowerCase() === 'cfc@2026' ||
-        inputPwd === 'Admin@2026' ||
-        inputPwd.toLowerCase() === 'admin@2026' ||
-        inputPwd.toLowerCase() === 'corpuss123' ||
-        inputPwd.toLowerCase() === 'corpus123' ||
-        inputPwd.toLowerCase() === 'yuvraj' ||
-        inputPwd.toLowerCase() === 'yuvraj123'
+        inputPwd === 'password123'
 
       if (!isMemberPwdValid) {
         set({ loading: false })
         return {
-          error: `Incorrect password for ${member.profile?.full_name}. Please check Caps Lock or enter the exact password issued by Admin (Default: ${expectedPassword}).`,
+          error: `Incorrect password for ${member.profile?.full_name || 'Member'}. Default password is 2026@cfc.`,
         }
       }
 

@@ -145,7 +145,7 @@ async function syncRelationalTable(key: string, value: any): Promise<void> {
         pt_status: m.pt_status || 'general_floor',
         pt_package: m.pt_package || null,
         photo_url: m.photo_url || m.profile?.avatar_url || null,
-        password: m.password || 'CFC@2026',
+        password: m.password || '2026@cfc',
         notes: m.notes || null,
         updated_at: new Date().toISOString(),
       }))
@@ -186,12 +186,12 @@ async function syncRelationalTable(key: string, value: any): Promise<void> {
     } else if (key === KEYS.ADMIN_PROFILE && value) {
       await supabase.from('admin_profile').upsert({
         id: 'admin-director-root',
-        full_name: value.full_name || 'Yuvraj Vaidya (Director)',
-        email: value.email || 'admin@corpuss.com',
+        full_name: value.full_name || 'Yuvraj Vaidya (Director & Admin)',
+        email: 'admin@corpuss.com',
         phone: value.phone || '+91 76206 83995',
         role: 'super_admin',
         avatar_url: value.avatar_url || null,
-        password: value.password || 'Admin@2026',
+        password: value.password || '2026@admin',
         updated_at: new Date().toISOString(),
       })
     } else if (key === KEYS.TRAINERS && Array.isArray(value)) {
@@ -200,7 +200,7 @@ async function syncRelationalTable(key: string, value: any): Promise<void> {
         name: t.name || 'Trainer',
         phone: t.phone || null,
         email: t.email || null,
-        password: t.password || 'CFC@TRN2026',
+        password: t.password || '2026@cfc',
         specialization: t.specialization || null,
         experience: t.experience ? String(t.experience) : null,
         certifications: Array.isArray(t.certifications) ? t.certifications : [],
@@ -809,8 +809,8 @@ export function generateCorpussEmail(fullName: string, role: 'member' | 'trainer
   }
 }
 
-export function generateCorpussPassword(prefix = 'CFC@'): string {
-  return `${prefix}${Math.floor(1000 + Math.random() * 9000)}`
+export function generateCorpussPassword(): string {
+  return '2026@cfc'
 }
 
 // Initial Seed Data Generator
@@ -1854,7 +1854,7 @@ function seedDatabase() {
     current_plan_id: 'ms-annual',
     photo_url: null,
     email: 'yuvraj.vaidya@corpuss.com',
-    password: 'CFC@2026',
+    password: '2026@cfc',
     notes: 'Director & Registered Member',
     created_at: '2026-01-15T10:00:00Z',
     updated_at: '2026-01-15T10:00:00Z',
@@ -2012,10 +2012,10 @@ export const db = {
   getAdminProfile(): Profile {
     seedDatabase()
     const defaultAdmin: Profile = {
-      id: 'profile-yuvraj',
-      full_name: 'Yuvraj (Club Director)',
+      id: 'admin-director-root',
+      full_name: 'Yuvraj Vaidya (Director & Admin)',
       phone: '+91 76206 83995',
-      email: 'yuvraj@corpuss.com',
+      email: 'admin@corpuss.com',
       role: 'super_admin',
       avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
       created_at: '2026-01-01T00:00:00.000Z',
@@ -2083,7 +2083,7 @@ export const db = {
       targetEmail = generateCorpussEmail(fullName, 'member')
     }
 
-    const assignedPassword = member.password || 'CFC@2026'
+    const assignedPassword = member.password || '2026@cfc'
 
     // STRICT UNIQUE EMAIL CHECK: One email can only be used once across the entire system!
     if (targetEmail) {
@@ -2123,7 +2123,7 @@ export const db = {
           ...member,
           email: targetEmail,
           photo_url: updatedPhoto,
-          password: member.password ?? existing.password ?? 'CFC@2026',
+          password: member.password ?? existing.password ?? '2026@cfc',
           updated_at: new Date().toISOString(),
           profile: {
             ...existing.profile!,
@@ -2305,16 +2305,14 @@ export const db = {
   // PASSWORD & CREDENTIALS SECURITY MANAGEMENT
   // ──────────────────────────────────────────────────────────────────────────
   getAdminPassword(): string {
-    return localStorage.getItem('cfc_admin_password') || 'Admin@2026'
+    return localStorage.getItem('cfc_admin_password') || '2026@admin'
   },
 
   changeAdminPassword(currentPassword: string, newPassword: string): { success: boolean; message: string } {
     const currentAdminPwd = this.getAdminPassword()
     const validCurrent =
       currentPassword.trim() === currentAdminPwd.trim() ||
-      currentPassword.trim() === 'Admin@2026' ||
-      currentPassword.trim() === 'CFC@Admin2026' ||
-      currentPassword.trim() === 'admin123'
+      currentPassword.trim() === '2026@admin'
 
     if (!validCurrent) {
       throw new Error('Current Admin master password is incorrect. Please verify your current password.')
@@ -2324,6 +2322,15 @@ export const db = {
     }
 
     localStorage.setItem('cfc_admin_password', newPassword.trim())
+
+    // Update in Supabase admin_profile table
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('admin_profile')
+        .update({ password: newPassword.trim(), updated_at: new Date().toISOString() })
+        .eq('id', 'admin-director-root')
+        .then(() => {}, () => {})
+    }
 
     // Log to system audit trail
     const auditLogs = getItem<AuditLog[]>(KEYS.AUDIT_LOGS, [])
@@ -2356,13 +2363,14 @@ export const db = {
     }
 
     const member = members[memberIndex]
-    const expectedPassword = (member.password || 'CFC@2026').trim()
+    const expectedPassword = (member.password || '2026@cfc').trim()
 
     const isCurrentValid =
       currentPassword.trim() === expectedPassword ||
       currentPassword.trim().toLowerCase() === expectedPassword.toLowerCase() ||
+      currentPassword.trim() === '2026@cfc' ||
+      currentPassword.trim().toLowerCase() === '2026@cfc' ||
       currentPassword.trim() === 'CFC@2026' ||
-      currentPassword.trim().toLowerCase() === 'cfc@2026' ||
       currentPassword.trim() === 'password123'
 
     if (!isCurrentValid) {
