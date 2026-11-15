@@ -1,30 +1,101 @@
 -- ==============================================================================
--- CORPUS FITNESS CLUB (CFC) - COMPLETE PRODUCTION DATABASE SCHEMA
--- Version: 2.0 (PostgreSQL / Supabase)
--- Location: Harshraj Colony, VMV Road, Amravati, Maharashtra
+-- CORPUS FITNESS CLUB (CFC) - COMPLETE FAIL-SAFE DATABASE SETUP
+-- Version: 2.1 (Self-Contained & Modular for Supabase)
 -- ==============================================================================
--- INSTRUCTIONS FOR 1-CLICK SETUP IN SUPABASE:
--- 1. Open your Supabase Project Dashboard (https://supabase.com/dashboard)
--- 2. Click on "SQL Editor" in the left sidebar
--- 3. Click "New query"
--- 4. Copy and paste the ENTIRE contents of this file into the editor
--- 5. Click the green "Run" button (or press Ctrl+Enter / Cmd+Enter)
--- 6. Done! All tables, RLS policies, real-time channels, and default seed data are ready.
+-- TIPS FOR SUPABASE SQL EDITOR:
+-- 1. Ensure NO TEXT is highlighted/selected in the editor before clicking "Run".
+--    (If text is highlighted, Supabase only runs the selected text!)
+-- 2. Press Ctrl+A (Select All) then click "Run" (or Ctrl+Enter).
 -- ==============================================================================
 
--- ── PART 1: EXTENSIONS & CLEANUP ─────────────────────────────────────────────
+-- ── 1. EXTENSIONS ─────────────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- ── PART 2: REAL-TIME MULTI-DEVICE STORE ─────────────────────────────────────
--- Acts as the ultra-fast real-time JSON sync engine across all gym devices and mobiles
+-- ── 2. REAL-TIME MULTI-DEVICE STORE ───────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS cfc_store (
   key TEXT PRIMARY KEY,
   data JSONB NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
--- ── PART 3: CORE AUTH & PROFILES ─────────────────────────────────────────────
+ALTER TABLE cfc_store ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to cfc_store" ON cfc_store;
+CREATE POLICY "Allow all access to cfc_store" ON cfc_store FOR ALL USING (true) WITH CHECK (true);
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE cfc_store;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+-- ── 3. MEMBERSHIP PLANS ───────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS membership_plans (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  duration_type TEXT NOT NULL,
+  duration_months INT NOT NULL,
+  price_men NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  price_women NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  price NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  description TEXT,
+  features TEXT[] DEFAULT '{}',
+  popular BOOLEAN DEFAULT false,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE membership_plans ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to membership_plans" ON membership_plans;
+CREATE POLICY "Allow all access to membership_plans" ON membership_plans FOR ALL USING (true) WITH CHECK (true);
+
+INSERT INTO membership_plans (id, name, duration_type, duration_months, price_men, price_women, price, description, features, popular, is_active)
+VALUES
+  ('monthly', 'Monthly Plan', '1 Month', 1, 700.00, 500.00, 700.00, 'Perfect starting plan with full facility access.',
+   ARRAY['Full Gym & Cardio Access', 'Locker & Shower Facility', 'General Floor Trainer Support', 'Free Fitness Assessment', 'Access During All Shifts'], false, true),
+  ('quarterly', 'Quarterly Plan', '3 Months', 3, 1800.00, 1400.00, 1800.00, '3 months of consistent training with moderate savings.',
+   ARRAY['Full Gym & Cardio Access', 'Locker Room Access', 'Custom Workout Routine Card', 'Basic Diet Guidelines', 'Monthly Body Composition Check'], false, true),
+  ('half-yearly', 'Half-Yearly Plan', '6 Months', 6, 3200.00, 2500.00, 3200.00, 'Our most popular plan! Best value for building habit & physique.',
+   ARRAY['Full Gym & Cardio Zone Access', 'Zumba & Aerobics Classes Included', 'Personalized Workout Plan', 'Custom Diet Chart & Nutrition Consult', 'Bi-weekly Body Measurements', 'Dedicated Locker Storage'], true, true),
+  ('annual', 'Yearly Plan', '12 Months', 12, 5000.00, 4000.00, 5000.00, 'Maximum savings for serious fitness enthusiasts. Complete transformation.',
+   ARRAY['365 Days Unlimited Gym Access', 'Zumba & Aerobics Batches Included', 'Dedicated Trainer Consultation', 'Advanced Nutrition & Diet Schedule', 'Free CFC Branded Gym Kit & Shaker', '1 Month Membership Freeze Option', 'Priority Locker Allotment'], false, true)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  price_men = EXCLUDED.price_men,
+  price_women = EXCLUDED.price_women,
+  price = EXCLUDED.price,
+  description = EXCLUDED.description,
+  features = EXCLUDED.features;
+
+-- ── 4. ADMIN DIRECTOR PROFILE ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS admin_profile (
+  id TEXT PRIMARY KEY DEFAULT 'admin-director-root',
+  full_name TEXT NOT NULL DEFAULT 'Yuvraj Vaidya (Director)',
+  email TEXT NOT NULL DEFAULT 'admin@corpuss.com',
+  phone VARCHAR(30) DEFAULT '+91 76206 83995',
+  role TEXT NOT NULL DEFAULT 'super_admin',
+  avatar_url TEXT,
+  password TEXT DEFAULT 'Admin@2026',
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE admin_profile ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to admin_profile" ON admin_profile;
+CREATE POLICY "Allow all access to admin_profile" ON admin_profile FOR ALL USING (true) WITH CHECK (true);
+
+INSERT INTO admin_profile (id, full_name, email, phone, role, avatar_url, password)
+VALUES (
+  'admin-director-root',
+  'Yuvraj Vaidya (Director)',
+  'admin@corpuss.com',
+  '+91 76206 83995',
+  'super_admin',
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+  'Admin@2026'
+) ON CONFLICT (id) DO UPDATE SET
+  full_name = EXCLUDED.full_name,
+  email = EXCLUDED.email,
+  phone = EXCLUDED.phone;
+
+-- ── 5. PROFILES ───────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS profiles (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   full_name TEXT NOT NULL,
@@ -39,19 +110,25 @@ CREATE TABLE IF NOT EXISTS profiles (
 CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(email);
 
--- ── PART 4: ADMIN DIRECTOR PROFILE ───────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS admin_profile (
-  id TEXT PRIMARY KEY DEFAULT 'admin-director-root',
-  full_name TEXT NOT NULL DEFAULT 'Yuvraj Vaidya (Director)',
-  email TEXT NOT NULL DEFAULT 'admin@corpuss.com',
-  phone VARCHAR(30) DEFAULT '+91 76206 83995',
-  role TEXT NOT NULL DEFAULT 'super_admin',
-  avatar_url TEXT,
-  password TEXT DEFAULT 'Admin@2026',
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to profiles" ON profiles;
+CREATE POLICY "Allow all access to profiles" ON profiles FOR ALL USING (true) WITH CHECK (true);
 
--- ── PART 5: TRAINERS & COACHES ───────────────────────────────────────────────
+INSERT INTO profiles (id, full_name, phone, email, role, avatar_url)
+VALUES
+  ('super-admin-uuid', 'Yuvraj Vaidya (Director)', '+91 76206 83995', 'superadmin@corpuss.com', 'super_admin', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'),
+  ('admin-uuid', 'CFC Gym Manager', '+91 76206 83995', 'admin@corpuss.com', 'admin', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80'),
+  ('reception-uuid', 'Pooja (Front Desk Officer)', '+91 76206 83995', 'reception@corpuss.com', 'receptionist', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80'),
+  ('trainer-uuid-1', 'Coach Rohit Deshmukh', '+91 98220 12345', 'rohit.deshmukh@corpuss.com', 'trainer', 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?auto=format&fit=crop&w=400&q=80'),
+  ('trainer-uuid-2', 'Priya Bhagat', '+91 94231 67890', 'priya.bhagat@corpuss.com', 'trainer', 'https://images.unsplash.com/photo-1594381898411-846e7d193883?auto=format&fit=crop&w=400&q=80'),
+  ('trainer-uuid-3', 'Amit Thakre', '+91 97654 32109', 'amit.thakre@corpuss.com', 'trainer', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'),
+  ('trainer-uuid-4', 'Sneha More', '+91 98810 54321', 'sneha.more@corpuss.com', 'trainer', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80'),
+  ('mem-prof-1', 'Yuvraj Vaidya', '+91 76206 83995', 'yuvraj.vaidya@corpuss.com', 'member', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80')
+ON CONFLICT (id) DO UPDATE SET
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role;
+
+-- ── 6. TRAINERS ───────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS trainers (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   profile_id TEXT REFERENCES profiles(id) ON DELETE SET NULL,
@@ -71,23 +148,22 @@ CREATE TABLE IF NOT EXISTS trainers (
 
 CREATE INDEX IF NOT EXISTS idx_trainers_is_active ON trainers(is_active);
 
--- ── PART 6: MEMBERSHIP PLANS ─────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS membership_plans (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  duration_type TEXT NOT NULL,
-  duration_months INT NOT NULL,
-  price_men NUMERIC(10, 2) NOT NULL DEFAULT 0,
-  price_women NUMERIC(10, 2) NOT NULL DEFAULT 0,
-  price NUMERIC(10, 2) NOT NULL DEFAULT 0,
-  description TEXT,
-  features TEXT[] DEFAULT '{}',
-  popular BOOLEAN DEFAULT false,
-  is_active BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+ALTER TABLE trainers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to trainers" ON trainers;
+CREATE POLICY "Allow all access to trainers" ON trainers FOR ALL USING (true) WITH CHECK (true);
 
--- ── PART 7: GYM MEMBERS ──────────────────────────────────────────────────────
+INSERT INTO trainers (id, profile_id, name, phone, email, password, specialization, experience, certifications, bio, photo, is_active)
+VALUES
+  ('trainer-1', 'trainer-uuid-1', 'Rohit Deshmukh', '+91 98220 12345', 'rohit.deshmukh@corpuss.com', 'CFC@TRN2026', 'Strength Training, Powerlifting & Body Transformation', '8+ Years', ARRAY['ISSA Certified Strength Coach', 'District Powerlifter'], 'Former district powerlifter with extensive certifications in biomechanics and injury-free hypertrophy training.', 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?auto=format&fit=crop&w=600&q=80', true),
+  ('trainer-2', 'trainer-uuid-2', 'Priya Bhagat', '+91 94231 67890', 'priya.bhagat@corpuss.com', 'CFC@TRN2026', 'Aerobics, Weight Loss & Female Toning', '5+ Years', ARRAY['ACE Certified', 'Aerobic Conditioning Specialist'], 'Specialist in postpartum fitness, aerobic endurance, and sustainable fat-loss regimens for women.', 'https://images.unsplash.com/photo-1594381898411-846e7d193883?auto=format&fit=crop&w=600&q=80', true),
+  ('trainer-3', 'trainer-uuid-3', 'Amit Thakre', '+91 97654 32109', 'amit.thakre@corpuss.com', 'CFC@TRN2026', 'Contest Prep, Dietetics & Muscle Hypertrophy', '6+ Years', ARRAY['Certified Sports Nutritionist'], 'Certified sports nutritionist helping members fuel their workouts with practical Indian nutrition plans.', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80', true),
+  ('trainer-4', 'trainer-uuid-4', 'Sneha More', '+91 98810 54321', 'sneha.more@corpuss.com', 'CFC@TRN2026', 'Zumba Fitness, HIIT & Mobility Coaching', '4+ Years', ARRAY['Licensed Zumba Instructor', 'HIIT Specialist'], 'Licensed Zumba instructor bringing infectious energy to every session. Expert in joint flexibility and stamina.', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&q=80', true)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  specialization = EXCLUDED.specialization,
+  experience = EXCLUDED.experience;
+
+-- ── 7. MEMBERS ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS members (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   profile_id TEXT REFERENCES profiles(id) ON DELETE SET NULL,
@@ -118,469 +194,14 @@ CREATE INDEX IF NOT EXISTS idx_members_status ON members(status);
 CREATE INDEX IF NOT EXISTS idx_members_member_id ON members(member_id);
 CREATE INDEX IF NOT EXISTS idx_members_trainer_id ON members(trainer_id);
 
--- ── PART 8: ACTIVE MEMBERSHIPS ───────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS memberships (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
-  plan_id TEXT REFERENCES membership_plans(id) ON DELETE RESTRICT,
-  start_date DATE NOT NULL,
-  end_date DATE NOT NULL,
-  amount_paid NUMERIC(10, 2) NOT NULL DEFAULT 0,
-  discount_amount NUMERIC(10, 2) DEFAULT 0,
-  payment_method TEXT DEFAULT 'UPI',
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'expired', 'cancelled', 'on_hold', 'upcoming')),
-  created_by TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+ALTER TABLE members ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to members" ON members;
+CREATE POLICY "Allow all access to members" ON members FOR ALL USING (true) WITH CHECK (true);
 
-CREATE INDEX IF NOT EXISTS idx_memberships_member_id ON memberships(member_id);
-CREATE INDEX IF NOT EXISTS idx_memberships_status ON memberships(status);
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE members;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
--- ── PART 9: MEMBERSHIP RENEWALS AUDIT ────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS membership_renewals (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
-  member_name TEXT NOT NULL,
-  member_code VARCHAR(50) NOT NULL,
-  renewal_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  previous_plan_name TEXT,
-  previous_expiry_date DATE,
-  renewed_plan_id TEXT REFERENCES membership_plans(id) ON DELETE RESTRICT,
-  renewed_plan_name TEXT NOT NULL,
-  new_start_date DATE NOT NULL,
-  new_expiry_date DATE NOT NULL,
-  amount_paid NUMERIC(10, 2) NOT NULL DEFAULT 0,
-  discount_amount NUMERIC(10, 2) DEFAULT 0,
-  payment_method TEXT DEFAULT 'UPI',
-  receipt_number VARCHAR(60) NOT NULL,
-  processed_by TEXT DEFAULT 'Admin Director',
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_renewals_member_id ON membership_renewals(member_id);
-
--- ── PART 10: PAYMENTS & BILLING ──────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS payments (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
-  membership_id TEXT REFERENCES memberships(id) ON DELETE SET NULL,
-  amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
-  total_amount NUMERIC(10, 2) DEFAULT 0,
-  pending_amount NUMERIC(10, 2) DEFAULT 0,
-  discount_amount NUMERIC(10, 2) DEFAULT 0,
-  payment_method TEXT NOT NULL DEFAULT 'UPI' CHECK (payment_method IN ('Cash', 'UPI', 'Bank Transfer', 'Card', 'Other')),
-  transaction_ref TEXT,
-  status TEXT NOT NULL DEFAULT 'paid' CHECK (status IN ('paid', 'partial', 'pending', 'refunded')),
-  payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  receipt_number VARCHAR(60) NOT NULL,
-  notes TEXT,
-  recorded_by TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_payments_member_id ON payments(member_id);
-CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
-CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(payment_date);
-
--- ── PART 11: ATTENDANCE & CHECK-IN ───────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS attendance (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
-  check_in TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  check_out TIMESTAMPTZ,
-  method TEXT NOT NULL DEFAULT 'qr' CHECK (method IN ('qr', 'manual')),
-  recorded_by TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_attendance_member_id ON attendance(member_id);
-CREATE INDEX IF NOT EXISTS idx_attendance_check_in ON attendance(check_in);
-
--- ── PART 12: EXERCISE LIBRARY ────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS exercise_library (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  name TEXT NOT NULL,
-  muscle_group TEXT NOT NULL,
-  equipment TEXT NOT NULL DEFAULT 'Barbell',
-  difficulty TEXT NOT NULL DEFAULT 'beginner' CHECK (difficulty IN ('beginner', 'intermediate', 'advanced')),
-  instructions TEXT,
-  default_sets INT NOT NULL DEFAULT 3,
-  default_reps TEXT NOT NULL DEFAULT '10 - 12',
-  default_rest_seconds INT NOT NULL DEFAULT 60,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_exercise_library_muscle ON exercise_library(muscle_group);
-
--- ── PART 13: WORKOUT PLANS & ROUTINES ────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS workout_plans (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  name TEXT NOT NULL,
-  category TEXT NOT NULL,
-  level TEXT NOT NULL CHECK (level IN ('beginner', 'intermediate', 'advanced')),
-  description TEXT,
-  trainer_id TEXT REFERENCES trainers(id) ON DELETE SET NULL,
-  trainer_name TEXT,
-  assigned_member_id TEXT REFERENCES members(id) ON DELETE SET NULL,
-  member_id TEXT REFERENCES members(id) ON DELETE SET NULL,
-  is_active BOOLEAN NOT NULL DEFAULT true,
-  is_default BOOLEAN NOT NULL DEFAULT false,
-  is_custom BOOLEAN NOT NULL DEFAULT false,
-  created_by_role TEXT NOT NULL DEFAULT 'admin' CHECK (created_by_role IN ('admin', 'trainer', 'member')),
-  duration_weeks INT NOT NULL DEFAULT 8,
-  days_per_week INT NOT NULL DEFAULT 4,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_workout_plans_category ON workout_plans(category);
-CREATE INDEX IF NOT EXISTS idx_workout_plans_is_default ON workout_plans(is_default);
-
--- ── PART 14: WORKOUT EXERCISES ───────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS workout_exercises (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  plan_id TEXT REFERENCES workout_plans(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  muscle_group TEXT NOT NULL,
-  sets INT NOT NULL DEFAULT 3,
-  reps TEXT NOT NULL DEFAULT '10 - 12',
-  weight TEXT DEFAULT 'Bodyweight',
-  rest_seconds INT NOT NULL DEFAULT 60,
-  day_of_week TEXT NOT NULL DEFAULT 'Monday',
-  instructions TEXT,
-  video_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_workout_exercises_plan ON workout_exercises(plan_id);
-
--- ── PART 15: MEMBER WORKOUT ASSIGNMENTS ───────────────────────────────────────
-CREATE TABLE IF NOT EXISTS member_workout_assignments (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
-  member_name TEXT NOT NULL,
-  member_code VARCHAR(50) NOT NULL,
-  member_phone VARCHAR(30),
-  workout_plan_id TEXT REFERENCES workout_plans(id) ON DELETE SET NULL,
-  workout_plan_name TEXT NOT NULL,
-  plan_snapshot JSONB NOT NULL,
-  trainer_id TEXT REFERENCES trainers(id) ON DELETE SET NULL,
-  trainer_name TEXT,
-  assigned_by TEXT NOT NULL DEFAULT 'Admin Director',
-  assigned_by_role TEXT NOT NULL DEFAULT 'admin' CHECK (assigned_by_role IN ('admin', 'trainer')),
-  start_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  end_date DATE NOT NULL,
-  personal_instructions TEXT,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'archived')),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_mwa_member_id ON member_workout_assignments(member_id);
-CREATE INDEX IF NOT EXISTS idx_mwa_status ON member_workout_assignments(status);
-
--- ── PART 16: WORKOUT SESSIONS & LOGS ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS workout_sessions (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
-  member_name TEXT,
-  plan_id TEXT REFERENCES workout_plans(id) ON DELETE SET NULL,
-  plan_name TEXT,
-  date DATE NOT NULL DEFAULT CURRENT_DATE,
-  start_time TIME,
-  end_time TIME,
-  duration_minutes INT DEFAULT 45,
-  notes TEXT,
-  trainer_id TEXT REFERENCES trainers(id) ON DELETE SET NULL,
-  trainer_name TEXT,
-  completed_sets JSONB DEFAULT '[]'::jsonb,
-  completion_percentage INT DEFAULT 100,
-  total_volume_kg NUMERIC(10, 2) DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_workout_sessions_member ON workout_sessions(member_id);
-CREATE INDEX IF NOT EXISTS idx_workout_sessions_date ON workout_sessions(date);
-
--- ── PART 17: DIET PLANS & MEAL ITEMS ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS diet_plans (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  name TEXT NOT NULL,
-  goal TEXT NOT NULL,
-  total_calories INT NOT NULL DEFAULT 2200,
-  protein_g INT NOT NULL DEFAULT 140,
-  carbs_g INT NOT NULL DEFAULT 220,
-  fats_g INT NOT NULL DEFAULT 65,
-  water_liters NUMERIC(4, 1) NOT NULL DEFAULT 3.5,
-  trainer_id TEXT REFERENCES trainers(id) ON DELETE SET NULL,
-  trainer_name TEXT,
-  assigned_member_id TEXT REFERENCES members(id) ON DELETE SET NULL,
-  is_active BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS meal_items (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  diet_plan_id TEXT REFERENCES diet_plans(id) ON DELETE CASCADE,
-  meal_type TEXT NOT NULL CHECK (meal_type IN ('Breakfast', 'Mid-Morning Snack', 'Lunch', 'Evening Snack', 'Dinner', 'Post-Workout')),
-  food_item TEXT NOT NULL,
-  quantity TEXT NOT NULL,
-  calories INT NOT NULL DEFAULT 0,
-  protein_g INT NOT NULL DEFAULT 0,
-  carbs_g INT NOT NULL DEFAULT 0,
-  fats_g INT NOT NULL DEFAULT 0,
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- ── PART 18: ENQUIRIES & ADMISSIONS ──────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS enquiries (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  reference_no VARCHAR(50) UNIQUE NOT NULL,
-  full_name TEXT NOT NULL,
-  phone VARCHAR(30) NOT NULL,
-  email TEXT,
-  gender TEXT CHECK (gender IN ('male', 'female', 'other')),
-  age TEXT,
-  interested_plan TEXT,
-  fitness_goal TEXT,
-  message TEXT,
-  status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'contacted', 'interested', 'converted', 'not_interested')),
-  lead_source TEXT DEFAULT 'Walk-in',
-  assigned_staff TEXT,
-  follow_up_date DATE,
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_enquiries_status ON enquiries(status);
-
--- ── PART 19: CLUB EXPENSES ───────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS expenses (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  category TEXT NOT NULL CHECK (category IN ('Rent', 'Electricity', 'Equipment', 'Maintenance', 'Salary', 'Marketing', 'Supplements', 'Cleaning & Sanitization', 'Other')),
-  amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
-  expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  description TEXT NOT NULL,
-  payment_method TEXT NOT NULL DEFAULT 'UPI',
-  receipt_url TEXT,
-  recorded_by TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- ── PART 20: FITNESS PROGRESS & MEASUREMENTS ─────────────────────────────────
-CREATE TABLE IF NOT EXISTS fitness_progress (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
-  recorded_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  weight_kg NUMERIC(5, 2) NOT NULL,
-  body_fat_pct NUMERIC(4, 1),
-  chest_cm NUMERIC(5, 1),
-  waist_cm NUMERIC(5, 1),
-  hips_cm NUMERIC(5, 1),
-  biceps_cm NUMERIC(5, 1),
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- ── PART 21: NOTIFICATIONS & BROADCASTS ──────────────────────────────────────
-CREATE TABLE IF NOT EXISTS notifications (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  user_id TEXT,
-  title TEXT NOT NULL,
-  message TEXT NOT NULL,
-  type TEXT NOT NULL DEFAULT 'info' CHECK (type IN ('info', 'success', 'warning', 'alert')),
-  is_read BOOLEAN NOT NULL DEFAULT false,
-  target_audience TEXT DEFAULT 'all' CHECK (target_audience IN ('all', 'active_members', 'trainers', 'expired_members')),
-  sent_by TEXT DEFAULT 'Admin Director',
-  priority TEXT DEFAULT 'normal' CHECK (priority IN ('normal', 'high', 'urgent')),
-  channels TEXT[] DEFAULT '{"in_app"}',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
-
--- ── PART 22: TRAINER ASSIGNMENTS & FEEDBACK ──────────────────────────────────
-CREATE TABLE IF NOT EXISTS trainer_assignments (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
-  member_name TEXT NOT NULL,
-  member_code VARCHAR(50) NOT NULL,
-  trainer_id TEXT REFERENCES trainers(id) ON DELETE SET NULL,
-  trainer_name TEXT,
-  assigned_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'changed', 'removed')),
-  assigned_by TEXT NOT NULL DEFAULT 'Admin Director',
-  notes TEXT,
-  previous_trainer_id TEXT,
-  previous_trainer_name TEXT,
-  pt_package TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS trainer_feedback (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
-  trainer_id TEXT REFERENCES trainers(id) ON DELETE CASCADE,
-  trainer_name TEXT NOT NULL,
-  month INT NOT NULL CHECK (month BETWEEN 1 AND 12),
-  year INT NOT NULL,
-  rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
-  feedback TEXT NOT NULL,
-  focus_areas TEXT[] DEFAULT '{}',
-  recommendations TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- ── PART 23: AUDIT LOGS ──────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS audit_logs (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  user_id TEXT NOT NULL,
-  user_name TEXT NOT NULL,
-  action TEXT NOT NULL,
-  entity_type TEXT NOT NULL,
-  entity_id TEXT,
-  details TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- ── PART 24: GALLERY & TESTIMONIALS ──────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS gallery (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  category TEXT NOT NULL,
-  title TEXT NOT NULL,
-  image TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS testimonials (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  name TEXT NOT NULL,
-  role TEXT NOT NULL,
-  rating INT NOT NULL DEFAULT 5,
-  text TEXT NOT NULL,
-  achievement TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- ==============================================================================
--- PART 25: ROW LEVEL SECURITY (RLS) POLICIES
--- Ensures frictionless public & authenticated access for all gym devices
--- ==============================================================================
-
-DO $$
-DECLARE
-  tbl_name TEXT;
-  tables TEXT[] := ARRAY[
-    'cfc_store', 'profiles', 'admin_profile', 'trainers', 'membership_plans',
-    'members', 'memberships', 'membership_renewals', 'payments', 'attendance',
-    'exercise_library', 'workout_plans', 'workout_exercises', 'member_workout_assignments',
-    'workout_sessions', 'diet_plans', 'meal_items', 'enquiries', 'expenses',
-    'fitness_progress', 'notifications', 'trainer_assignments', 'trainer_feedback',
-    'audit_logs', 'gallery', 'testimonials'
-  ];
-BEGIN
-  FOREACH tbl_name IN ARRAY tables LOOP
-    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', tbl_name);
-    EXECUTE format('DROP POLICY IF EXISTS "Allow all access to %s" ON %I;', tbl_name, tbl_name);
-    EXECUTE format('CREATE POLICY "Allow all access to %s" ON %I FOR ALL USING (true) WITH CHECK (true);', tbl_name, tbl_name);
-  END LOOP;
-END $$;
-
--- ==============================================================================
--- PART 26: REALTIME BROADCASTING
--- Enables instant live WebSocket updates across multi-device dashboards
--- ==============================================================================
-
-DO $$
-DECLARE
-  tbl_name TEXT;
-  rt_tables TEXT[] := ARRAY[
-    'cfc_store', 'members', 'memberships', 'membership_renewals', 'payments',
-    'attendance', 'workout_plans', 'workout_exercises', 'member_workout_assignments',
-    'workout_sessions', 'notifications'
-  ];
-BEGIN
-  FOREACH tbl_name IN ARRAY rt_tables LOOP
-    BEGIN
-      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %I;', tbl_name);
-    EXCEPTION WHEN OTHERS THEN
-      -- Table is already in publication or publication does not exist; continue silently
-      NULL;
-    END;
-  END LOOP;
-END $$;
-
--- ==============================================================================
--- PART 27: PRODUCTION INITIAL SEED DATA
--- Pre-seeds core templates, plans, trainers, and initial director member
--- ==============================================================================
-
--- 1. Membership Plans
-INSERT INTO membership_plans (id, name, duration_type, duration_months, price_men, price_women, price, description, features, popular, is_active)
-VALUES
-  ('monthly', 'Monthly Plan', '1 Month', 1, 700.00, 500.00, 700.00, 'Perfect starting plan with full facility access.',
-   ARRAY['Full Gym & Cardio Access', 'Locker & Shower Facility', 'General Floor Trainer Support', 'Free Fitness Assessment', 'Access During All Shifts'], false, true),
-  ('quarterly', 'Quarterly Plan', '3 Months', 3, 1800.00, 1400.00, 1800.00, '3 months of consistent training with moderate savings.',
-   ARRAY['Full Gym & Cardio Access', 'Locker Room Access', 'Custom Workout Routine Card', 'Basic Diet Guidelines', 'Monthly Body Composition Check'], false, true),
-  ('half-yearly', 'Half-Yearly Plan', '6 Months', 6, 3200.00, 2500.00, 3200.00, 'Our most popular plan! Best value for building habit & physique.',
-   ARRAY['Full Gym & Cardio Zone Access', 'Zumba & Aerobics Classes Included', 'Personalized Workout Plan', 'Custom Diet Chart & Nutrition Consult', 'Bi-weekly Body Measurements', 'Dedicated Locker Storage'], true, true),
-  ('annual', 'Yearly Plan', '12 Months', 12, 5000.00, 4000.00, 5000.00, 'Maximum savings for serious fitness enthusiasts. Complete transformation.',
-   ARRAY['365 Days Unlimited Gym Access', 'Zumba & Aerobics Batches Included', 'Dedicated Trainer Consultation', 'Advanced Nutrition & Diet Schedule', 'Free CFC Branded Gym Kit & Shaker', '1 Month Membership Freeze Option', 'Priority Locker Allotment'], false, true)
-ON CONFLICT (id) DO UPDATE SET
-  name = EXCLUDED.name,
-  price_men = EXCLUDED.price_men,
-  price_women = EXCLUDED.price_women,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  features = EXCLUDED.features;
-
--- 2. Director Admin Profile
-INSERT INTO admin_profile (id, full_name, email, phone, role, avatar_url, password)
-VALUES (
-  'admin-director-root',
-  'Yuvraj Vaidya (Director)',
-  'admin@corpuss.com',
-  '+91 76206 83995',
-  'super_admin',
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-  'Admin@2026'
-) ON CONFLICT (id) DO UPDATE SET
-  full_name = EXCLUDED.full_name,
-  email = EXCLUDED.email,
-  phone = EXCLUDED.phone;
-
--- 3. Profiles for Staff & Admin
-INSERT INTO profiles (id, full_name, phone, email, role, avatar_url)
-VALUES
-  ('super-admin-uuid', 'Yuvraj Vaidya (Director)', '+91 76206 83995', 'superadmin@corpuss.com', 'super_admin', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'),
-  ('admin-uuid', 'CFC Gym Manager', '+91 76206 83995', 'admin@corpuss.com', 'admin', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80'),
-  ('reception-uuid', 'Pooja (Front Desk Officer)', '+91 76206 83995', 'reception@corpuss.com', 'receptionist', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80'),
-  ('trainer-uuid-1', 'Coach Rohit Deshmukh', '+91 98220 12345', 'rohit.deshmukh@corpuss.com', 'trainer', 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?auto=format&fit=crop&w=400&q=80'),
-  ('trainer-uuid-2', 'Priya Bhagat', '+91 94231 67890', 'priya.bhagat@corpuss.com', 'trainer', 'https://images.unsplash.com/photo-1594381898411-846e7d193883?auto=format&fit=crop&w=400&q=80'),
-  ('trainer-uuid-3', 'Amit Thakre', '+91 97654 32109', 'amit.thakre@corpuss.com', 'trainer', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'),
-  ('trainer-uuid-4', 'Sneha More', '+91 98810 54321', 'sneha.more@corpuss.com', 'trainer', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80'),
-  ('mem-prof-1', 'Yuvraj Vaidya', '+91 76206 83995', 'yuvraj.vaidya@corpuss.com', 'member', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80')
-ON CONFLICT (id) DO UPDATE SET
-  full_name = EXCLUDED.full_name,
-  role = EXCLUDED.role;
-
--- 4. Trainers
-INSERT INTO trainers (id, profile_id, name, phone, email, password, specialization, experience, certifications, bio, photo, is_active)
-VALUES
-  ('trainer-1', 'trainer-uuid-1', 'Rohit Deshmukh', '+91 98220 12345', 'rohit.deshmukh@corpuss.com', 'CFC@TRN2026', 'Strength Training, Powerlifting & Body Transformation', '8+ Years', ARRAY['ISSA Certified Strength Coach', 'District Powerlifter'], 'Former district powerlifter with extensive certifications in biomechanics and injury-free hypertrophy training.', 'https://images.unsplash.com/photo-1567013127542-490d757e51fc?auto=format&fit=crop&w=600&q=80', true),
-  ('trainer-2', 'trainer-uuid-2', 'Priya Bhagat', '+91 94231 67890', 'priya.bhagat@corpuss.com', 'CFC@TRN2026', 'Aerobics, Weight Loss & Female Toning', '5+ Years', ARRAY['ACE Certified', 'Aerobic Conditioning Specialist'], 'Specialist in postpartum fitness, aerobic endurance, and sustainable fat-loss regimens for women.', 'https://images.unsplash.com/photo-1594381898411-846e7d193883?auto=format&fit=crop&w=600&q=80', true),
-  ('trainer-3', 'trainer-uuid-3', 'Amit Thakre', '+91 97654 32109', 'amit.thakre@corpuss.com', 'CFC@TRN2026', 'Contest Prep, Dietetics & Muscle Hypertrophy', '6+ Years', ARRAY['Certified Sports Nutritionist'], 'Certified sports nutritionist helping members fuel their workouts with practical Indian nutrition plans.', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80', true),
-  ('trainer-4', 'trainer-uuid-4', 'Sneha More', '+91 98810 54321', 'sneha.more@corpuss.com', 'CFC@TRN2026', 'Zumba Fitness, HIIT & Mobility Coaching', '4+ Years', ARRAY['Licensed Zumba Instructor', 'HIIT Specialist'], 'Licensed Zumba instructor bringing infectious energy to every session. Expert in joint flexibility and stamina.', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=600&q=80', true)
-ON CONFLICT (id) DO UPDATE SET
-  name = EXCLUDED.name,
-  specialization = EXCLUDED.specialization,
-  experience = EXCLUDED.experience;
-
--- 5. Primary Gym Member (Yuvraj Vaidya)
 INSERT INTO members (id, profile_id, member_id, gender, date_of_birth, address, emergency_contact, emergency_phone, registration_date, fitness_goal, status, current_plan_id, trainer_id, trainer_name, pt_status, pt_package, photo_url, password, email, phone, notes)
 VALUES (
   'mem-6',
@@ -610,7 +231,32 @@ VALUES (
   phone = EXCLUDED.phone,
   status = EXCLUDED.status;
 
--- 6. Member Membership
+-- ── 8. MEMBERSHIPS ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS memberships (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
+  plan_id TEXT REFERENCES membership_plans(id) ON DELETE RESTRICT,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  amount_paid NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  discount_amount NUMERIC(10, 2) DEFAULT 0,
+  payment_method TEXT DEFAULT 'UPI',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'expired', 'cancelled', 'on_hold', 'upcoming')),
+  created_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_memberships_member_id ON memberships(member_id);
+CREATE INDEX IF NOT EXISTS idx_memberships_status ON memberships(status);
+
+ALTER TABLE memberships ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to memberships" ON memberships;
+CREATE POLICY "Allow all access to memberships" ON memberships FOR ALL USING (true) WITH CHECK (true);
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE memberships;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 INSERT INTO memberships (id, member_id, plan_id, start_date, end_date, amount_paid, discount_amount, payment_method, status, created_by)
 VALUES (
   'mship-root-1',
@@ -627,7 +273,67 @@ VALUES (
   end_date = EXCLUDED.end_date,
   status = EXCLUDED.status;
 
--- 7. Payment Record
+-- ── 9. MEMBERSHIP RENEWALS ────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS membership_renewals (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
+  member_name TEXT NOT NULL,
+  member_code VARCHAR(50) NOT NULL,
+  renewal_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  previous_plan_name TEXT,
+  previous_expiry_date DATE,
+  renewed_plan_id TEXT REFERENCES membership_plans(id) ON DELETE RESTRICT,
+  renewed_plan_name TEXT NOT NULL,
+  new_start_date DATE NOT NULL,
+  new_expiry_date DATE NOT NULL,
+  amount_paid NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  discount_amount NUMERIC(10, 2) DEFAULT 0,
+  payment_method TEXT DEFAULT 'UPI',
+  receipt_number VARCHAR(60) NOT NULL,
+  processed_by TEXT DEFAULT 'Admin Director',
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE membership_renewals ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to membership_renewals" ON membership_renewals;
+CREATE POLICY "Allow all access to membership_renewals" ON membership_renewals FOR ALL USING (true) WITH CHECK (true);
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE membership_renewals;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+-- ── 10. PAYMENTS ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS payments (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
+  membership_id TEXT REFERENCES memberships(id) ON DELETE SET NULL,
+  amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  total_amount NUMERIC(10, 2) DEFAULT 0,
+  pending_amount NUMERIC(10, 2) DEFAULT 0,
+  discount_amount NUMERIC(10, 2) DEFAULT 0,
+  payment_method TEXT NOT NULL DEFAULT 'UPI' CHECK (payment_method IN ('Cash', 'UPI', 'Bank Transfer', 'Card', 'Other')),
+  transaction_ref TEXT,
+  status TEXT NOT NULL DEFAULT 'paid' CHECK (status IN ('paid', 'partial', 'pending', 'refunded')),
+  payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  receipt_number VARCHAR(60) NOT NULL,
+  notes TEXT,
+  recorded_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payments_member_id ON payments(member_id);
+CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(payment_date);
+
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to payments" ON payments;
+CREATE POLICY "Allow all access to payments" ON payments FOR ALL USING (true) WITH CHECK (true);
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE payments;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 INSERT INTO payments (id, member_id, membership_id, amount, total_amount, pending_amount, discount_amount, payment_method, transaction_ref, status, payment_date, receipt_number, notes, recorded_by)
 VALUES (
   'pay-root-1',
@@ -648,7 +354,46 @@ VALUES (
   amount = EXCLUDED.amount,
   status = EXCLUDED.status;
 
--- 8. Exercise Library (Standard 30 Functional & Resistance Movements)
+-- ── 11. ATTENDANCE ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS attendance (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
+  check_in TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  check_out TIMESTAMPTZ,
+  method TEXT NOT NULL DEFAULT 'qr' CHECK (method IN ('qr', 'manual')),
+  recorded_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_member_id ON attendance(member_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_check_in ON attendance(check_in);
+
+ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to attendance" ON attendance;
+CREATE POLICY "Allow all access to attendance" ON attendance FOR ALL USING (true) WITH CHECK (true);
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE attendance;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+-- ── 12. EXERCISE LIBRARY ──────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS exercise_library (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name TEXT NOT NULL,
+  muscle_group TEXT NOT NULL,
+  equipment TEXT NOT NULL DEFAULT 'Barbell',
+  difficulty TEXT NOT NULL DEFAULT 'beginner' CHECK (difficulty IN ('beginner', 'intermediate', 'advanced')),
+  instructions TEXT,
+  default_sets INT NOT NULL DEFAULT 3,
+  default_reps TEXT NOT NULL DEFAULT '10 - 12',
+  default_rest_seconds INT NOT NULL DEFAULT 60,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE exercise_library ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to exercise_library" ON exercise_library;
+CREATE POLICY "Allow all access to exercise_library" ON exercise_library FOR ALL USING (true) WITH CHECK (true);
+
 INSERT INTO exercise_library (id, name, muscle_group, equipment, difficulty, instructions, default_sets, default_reps, default_rest_seconds)
 VALUES
   ('lib-ex-1', 'Barbell Flat Bench Press', 'Chest', 'Barbell', 'intermediate', 'Retract scapulae, touch bar to mid-sternum with elbows at ~45 degrees, and drive through chest to lockout.', 4, '8 - 12', 90),
@@ -686,7 +431,35 @@ ON CONFLICT (id) DO UPDATE SET
   muscle_group = EXCLUDED.muscle_group,
   instructions = EXCLUDED.instructions;
 
--- 9. The 7 Admin Core Default Workout Plan Templates
+-- ── 13. WORKOUT PLANS ─────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS workout_plans (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  level TEXT NOT NULL CHECK (level IN ('beginner', 'intermediate', 'advanced')),
+  description TEXT,
+  trainer_id TEXT REFERENCES trainers(id) ON DELETE SET NULL,
+  trainer_name TEXT,
+  assigned_member_id TEXT REFERENCES members(id) ON DELETE SET NULL,
+  member_id TEXT REFERENCES members(id) ON DELETE SET NULL,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  is_default BOOLEAN NOT NULL DEFAULT false,
+  is_custom BOOLEAN NOT NULL DEFAULT false,
+  created_by_role TEXT NOT NULL DEFAULT 'admin' CHECK (created_by_role IN ('admin', 'trainer', 'member')),
+  duration_weeks INT NOT NULL DEFAULT 8,
+  days_per_week INT NOT NULL DEFAULT 4,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE workout_plans ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to workout_plans" ON workout_plans;
+CREATE POLICY "Allow all access to workout_plans" ON workout_plans FOR ALL USING (true) WITH CHECK (true);
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE workout_plans;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 INSERT INTO workout_plans (id, name, category, level, description, trainer_name, is_active, is_default, is_custom, created_by_role, duration_weeks, days_per_week)
 VALUES
   ('wp-default-beginner', 'Beginner Workout – Foundation Protocol', 'Beginner Workout', 'beginner', 'Complete introductory strength & conditioning split designed to build joint stability, neural adaptation, and safe lifting form across major movements.', 'Coach Rohit Deshmukh', true, true, false, 'admin', 6, 3),
@@ -704,7 +477,30 @@ ON CONFLICT (id) DO UPDATE SET
   duration_weeks = EXCLUDED.duration_weeks,
   days_per_week = EXCLUDED.days_per_week;
 
--- 10. Workout Exercises for the 7 Templates (All 39 movements)
+-- ── 14. WORKOUT EXERCISES ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS workout_exercises (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  plan_id TEXT REFERENCES workout_plans(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  muscle_group TEXT NOT NULL,
+  sets INT NOT NULL DEFAULT 3,
+  reps TEXT NOT NULL DEFAULT '10 - 12',
+  weight TEXT DEFAULT 'Bodyweight',
+  rest_seconds INT NOT NULL DEFAULT 60,
+  day_of_week TEXT NOT NULL DEFAULT 'Monday',
+  instructions TEXT,
+  video_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE workout_exercises ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to workout_exercises" ON workout_exercises;
+CREATE POLICY "Allow all access to workout_exercises" ON workout_exercises FOR ALL USING (true) WITH CHECK (true);
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE workout_exercises;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 INSERT INTO workout_exercises (id, plan_id, name, muscle_group, sets, reps, weight, rest_seconds, day_of_week, instructions)
 VALUES
   -- 1. Beginner Workout
@@ -766,7 +562,36 @@ ON CONFLICT (id) DO UPDATE SET
   weight = EXCLUDED.weight,
   rest_seconds = EXCLUDED.rest_seconds;
 
--- 11. Initial Workout Assignment for Member Yuvraj Vaidya
+-- ── 15. MEMBER WORKOUT ASSIGNMENTS ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS member_workout_assignments (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
+  member_name TEXT NOT NULL,
+  member_code VARCHAR(50) NOT NULL,
+  member_phone VARCHAR(30),
+  workout_plan_id TEXT REFERENCES workout_plans(id) ON DELETE SET NULL,
+  workout_plan_name TEXT NOT NULL,
+  plan_snapshot JSONB NOT NULL,
+  trainer_id TEXT REFERENCES trainers(id) ON DELETE SET NULL,
+  trainer_name TEXT,
+  assigned_by TEXT NOT NULL DEFAULT 'Admin Director',
+  assigned_by_role TEXT NOT NULL DEFAULT 'admin' CHECK (assigned_by_role IN ('admin', 'trainer')),
+  start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  end_date DATE NOT NULL,
+  personal_instructions TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'archived')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE member_workout_assignments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to member_workout_assignments" ON member_workout_assignments;
+CREATE POLICY "Allow all access to member_workout_assignments" ON member_workout_assignments FOR ALL USING (true) WITH CHECK (true);
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE member_workout_assignments;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 INSERT INTO member_workout_assignments (id, member_id, member_name, member_code, member_phone, workout_plan_id, workout_plan_name, plan_snapshot, trainer_id, trainer_name, assigned_by, assigned_by_role, start_date, end_date, personal_instructions, status)
 VALUES (
   'mwa-root-1',
@@ -789,7 +614,156 @@ VALUES (
   workout_plan_name = EXCLUDED.workout_plan_name,
   status = EXCLUDED.status;
 
--- 12. Club Welcome Broadcast Notification
+-- ── 16. WORKOUT SESSIONS ──────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS workout_sessions (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
+  member_name TEXT,
+  plan_id TEXT REFERENCES workout_plans(id) ON DELETE SET NULL,
+  plan_name TEXT,
+  date DATE NOT NULL DEFAULT CURRENT_DATE,
+  start_time TIME,
+  end_time TIME,
+  duration_minutes INT DEFAULT 45,
+  notes TEXT,
+  trainer_id TEXT REFERENCES trainers(id) ON DELETE SET NULL,
+  trainer_name TEXT,
+  completed_sets JSONB DEFAULT '[]'::jsonb,
+  completion_percentage INT DEFAULT 100,
+  total_volume_kg NUMERIC(10, 2) DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE workout_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to workout_sessions" ON workout_sessions;
+CREATE POLICY "Allow all access to workout_sessions" ON workout_sessions FOR ALL USING (true) WITH CHECK (true);
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE workout_sessions;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+-- ── 17. DIET PLANS & MEALS ────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS diet_plans (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name TEXT NOT NULL,
+  goal TEXT NOT NULL,
+  total_calories INT NOT NULL DEFAULT 2200,
+  protein_g INT NOT NULL DEFAULT 140,
+  carbs_g INT NOT NULL DEFAULT 220,
+  fats_g INT NOT NULL DEFAULT 65,
+  water_liters NUMERIC(4, 1) NOT NULL DEFAULT 3.5,
+  trainer_id TEXT REFERENCES trainers(id) ON DELETE SET NULL,
+  trainer_name TEXT,
+  assigned_member_id TEXT REFERENCES members(id) ON DELETE SET NULL,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE diet_plans ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to diet_plans" ON diet_plans;
+CREATE POLICY "Allow all access to diet_plans" ON diet_plans FOR ALL USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS meal_items (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  diet_plan_id TEXT REFERENCES diet_plans(id) ON DELETE CASCADE,
+  meal_type TEXT NOT NULL CHECK (meal_type IN ('Breakfast', 'Mid-Morning Snack', 'Lunch', 'Evening Snack', 'Dinner', 'Post-Workout')),
+  food_item TEXT NOT NULL,
+  quantity TEXT NOT NULL,
+  calories INT NOT NULL DEFAULT 0,
+  protein_g INT NOT NULL DEFAULT 0,
+  carbs_g INT NOT NULL DEFAULT 0,
+  fats_g INT NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE meal_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to meal_items" ON meal_items;
+CREATE POLICY "Allow all access to meal_items" ON meal_items FOR ALL USING (true) WITH CHECK (true);
+
+-- ── 18. ENQUIRIES ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS enquiries (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  reference_no VARCHAR(50) UNIQUE NOT NULL,
+  full_name TEXT NOT NULL,
+  phone VARCHAR(30) NOT NULL,
+  email TEXT,
+  gender TEXT CHECK (gender IN ('male', 'female', 'other')),
+  age TEXT,
+  interested_plan TEXT,
+  fitness_goal TEXT,
+  message TEXT,
+  status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'contacted', 'interested', 'converted', 'not_interested')),
+  lead_source TEXT DEFAULT 'Walk-in',
+  assigned_staff TEXT,
+  follow_up_date DATE,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE enquiries ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to enquiries" ON enquiries;
+CREATE POLICY "Allow all access to enquiries" ON enquiries FOR ALL USING (true) WITH CHECK (true);
+
+-- ── 19. EXPENSES ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS expenses (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  category TEXT NOT NULL CHECK (category IN ('Rent', 'Electricity', 'Equipment', 'Maintenance', 'Salary', 'Marketing', 'Supplements', 'Cleaning & Sanitization', 'Other')),
+  amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  description TEXT NOT NULL,
+  payment_method TEXT NOT NULL DEFAULT 'UPI',
+  receipt_url TEXT,
+  recorded_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to expenses" ON expenses;
+CREATE POLICY "Allow all access to expenses" ON expenses FOR ALL USING (true) WITH CHECK (true);
+
+-- ── 20. FITNESS PROGRESS ──────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS fitness_progress (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
+  recorded_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  weight_kg NUMERIC(5, 2) NOT NULL,
+  body_fat_pct NUMERIC(4, 1),
+  chest_cm NUMERIC(5, 1),
+  waist_cm NUMERIC(5, 1),
+  hips_cm NUMERIC(5, 1),
+  biceps_cm NUMERIC(5, 1),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE fitness_progress ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to fitness_progress" ON fitness_progress;
+CREATE POLICY "Allow all access to fitness_progress" ON fitness_progress FOR ALL USING (true) WITH CHECK (true);
+
+-- ── 21. NOTIFICATIONS ─────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id TEXT,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'info' CHECK (type IN ('info', 'success', 'warning', 'alert')),
+  is_read BOOLEAN NOT NULL DEFAULT false,
+  target_audience TEXT DEFAULT 'all' CHECK (target_audience IN ('all', 'active_members', 'trainers', 'expired_members')),
+  sent_by TEXT DEFAULT 'Admin Director',
+  priority TEXT DEFAULT 'normal' CHECK (priority IN ('normal', 'high', 'urgent')),
+  channels TEXT[] DEFAULT '{"in_app"}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to notifications" ON notifications;
+CREATE POLICY "Allow all access to notifications" ON notifications FOR ALL USING (true) WITH CHECK (true);
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
 INSERT INTO notifications (id, user_id, title, message, type, is_read, target_audience, sent_by, priority, channels)
 VALUES (
   'notif-root-1',
@@ -804,7 +778,76 @@ VALUES (
   ARRAY['in_app']
 ) ON CONFLICT (id) DO NOTHING;
 
--- 13. Gallery Items
+-- ── 22. TRAINER ASSIGNMENTS & FEEDBACK ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS trainer_assignments (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
+  member_name TEXT NOT NULL,
+  member_code VARCHAR(50) NOT NULL,
+  trainer_id TEXT REFERENCES trainers(id) ON DELETE SET NULL,
+  trainer_name TEXT,
+  assigned_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'changed', 'removed')),
+  assigned_by TEXT NOT NULL DEFAULT 'Admin Director',
+  notes TEXT,
+  previous_trainer_id TEXT,
+  previous_trainer_name TEXT,
+  pt_package TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE trainer_assignments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to trainer_assignments" ON trainer_assignments;
+CREATE POLICY "Allow all access to trainer_assignments" ON trainer_assignments FOR ALL USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS trainer_feedback (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
+  trainer_id TEXT REFERENCES trainers(id) ON DELETE CASCADE,
+  trainer_name TEXT NOT NULL,
+  month INT NOT NULL CHECK (month BETWEEN 1 AND 12),
+  year INT NOT NULL,
+  rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  feedback TEXT NOT NULL,
+  focus_areas TEXT[] DEFAULT '{}',
+  recommendations TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE trainer_feedback ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to trainer_feedback" ON trainer_feedback;
+CREATE POLICY "Allow all access to trainer_feedback" ON trainer_feedback FOR ALL USING (true) WITH CHECK (true);
+
+-- ── 23. AUDIT LOGS ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id TEXT NOT NULL,
+  user_name TEXT NOT NULL,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  details TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to audit_logs" ON audit_logs;
+CREATE POLICY "Allow all access to audit_logs" ON audit_logs FOR ALL USING (true) WITH CHECK (true);
+
+-- ── 24. GALLERY ───────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS gallery (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  category TEXT NOT NULL,
+  title TEXT NOT NULL,
+  image TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE gallery ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to gallery" ON gallery;
+CREATE POLICY "Allow all access to gallery" ON gallery FOR ALL USING (true) WITH CHECK (true);
+
 INSERT INTO gallery (id, category, title, image)
 VALUES
   ('g1', 'Gym Interior', 'Spacious 3rd Floor Main Floor', 'https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&w=800&q=80'),
@@ -815,7 +858,21 @@ VALUES
   ('g6', 'Training', '1-on-1 Personal Coaching Session', 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=800&q=80')
 ON CONFLICT (id) DO NOTHING;
 
--- 14. Testimonials
+-- ── 25. TESTIMONIALS ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS testimonials (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  rating INT NOT NULL DEFAULT 5,
+  text TEXT NOT NULL,
+  achievement TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE testimonials ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to testimonials" ON testimonials;
+CREATE POLICY "Allow all access to testimonials" ON testimonials FOR ALL USING (true) WITH CHECK (true);
+
 INSERT INTO testimonials (id, name, role, rating, text, achievement)
 VALUES
   ('t1', 'Sanket Deshmukh', 'Member since 2022', 5, 'Joined Corpus Fitness Club with 88 kg weight and low stamina. With coach Rohit’s guidance and clean diet plan, I lost 16 kg in 6 months! Best gym on VMV road.', 'Lost 16 kg & gained lean strength'),
@@ -823,7 +880,5 @@ VALUES
   ('t3', 'Akash Wankhade', 'Member since 2021', 5, 'Equipment is very well maintained, heavy weights up to 50kg, and great ventilation. The QR attendance and mobile portal make tracking workouts very easy.', 'Squat PR: 160 kg, Bench PR: 110 kg')
 ON CONFLICT (id) DO NOTHING;
 
--- ==============================================================================
--- SUCCESS CONFIRMATION
--- ==============================================================================
-SELECT 'CORPUS FITNESS CLUB DATABASE INITIALIZED SUCCESSFULLY! 26 TABLES READY WITH ROW LEVEL SECURITY & REALTIME SYNC.' AS status;
+-- ── SUCCESS STATUS ────────────────────────────────────────────────────────────
+SELECT 'CORPUS FITNESS CLUB DATABASE READY! ALL 26 TABLES & POLICIES INITIALIZED.' AS status;
