@@ -109,12 +109,32 @@ async function syncRelationalTable(key: string, value: any): Promise<void> {
           !FAKE_MEMBER_EMAILS.has((m?.email || '').toLowerCase()) &&
           !FAKE_MEMBER_EMAILS.has((m?.profile?.email || '').toLowerCase())
       )
-      const rows = cleanMembers.map((m: any) => ({
-        id: m.id,
-        member_id: m.member_id || `CFC-2026-${m.id}`,
+
+      // 1. Sync Profiles first
+      const profiles = cleanMembers.map((m: any, idx: number) => ({
+        id: m.profile_id || m.profile?.id || `prof-${m.id || idx + 1}`,
+        full_name: m.profile?.full_name || m.full_name || 'Member',
+        email: m.email || m.profile?.email || null,
+        phone: m.phone || m.profile?.phone || null,
+        role: 'member',
+        avatar_url: m.photo_url || m.profile?.avatar_url || null,
+        updated_at: new Date().toISOString(),
+      }))
+      if (profiles.length > 0) {
+        await supabase.from('profiles').upsert(profiles)
+      }
+
+      // 2. Sync Members table
+      const rows = cleanMembers.map((m: any, idx: number) => ({
+        id: m.id || `mem-${idx + 1}`,
+        profile_id: m.profile_id || m.profile?.id || `prof-${m.id || idx + 1}`,
+        member_id: m.member_id || `CFC-2026-${String(idx + 1).padStart(4, '0')}`,
         gender: m.gender || 'male',
         date_of_birth: m.date_of_birth || null,
         address: m.address || null,
+        emergency_contact: m.emergency_contact || null,
+        emergency_phone: m.emergency_phone || null,
+        registration_date: m.registration_date || new Date().toISOString().split('T')[0],
         phone: m.phone || m.profile?.phone || null,
         email: m.email || m.profile?.email || null,
         fitness_goal: m.fitness_goal || null,
@@ -138,9 +158,9 @@ async function syncRelationalTable(key: string, value: any): Promise<void> {
         name: p.name,
         duration_type: p.duration_type || `${p.duration_months || 1} Month`,
         duration_months: p.duration_months || 1,
-        price_men: p.price_men || 0,
-        price_women: p.price_women || 0,
-        price: p.price || 0,
+        price_men: Number(p.price_men) || 0,
+        price_women: Number(p.price_women) || 0,
+        price: Number(p.price) || 0,
         description: p.description || '',
         features: p.features || [],
         popular: !!p.popular,
@@ -160,11 +180,88 @@ async function syncRelationalTable(key: string, value: any): Promise<void> {
         password: value.password || 'Admin@2026',
         updated_at: new Date().toISOString(),
       })
+    } else if (key === KEYS.TRAINERS && Array.isArray(value)) {
+      const rows = value.map((t: any, idx: number) => ({
+        id: t.id || `trn-${idx + 1}`,
+        name: t.name || 'Trainer',
+        phone: t.phone || null,
+        email: t.email || null,
+        password: t.password || 'CFC@TRN2026',
+        specialization: t.specialization || null,
+        experience: t.experience ? String(t.experience) : null,
+        certifications: Array.isArray(t.certifications) ? t.certifications : [],
+        bio: t.bio || null,
+        photo: t.photo || t.photo_url || null,
+        is_active: t.is_active !== false,
+        assigned_member_count: Number(t.assigned_member_count || t.client_count) || 0,
+      }))
+      if (rows.length > 0) {
+        await supabase.from('trainers').upsert(rows)
+      }
+    } else if (key === KEYS.PAYMENTS && Array.isArray(value)) {
+      const { data: mList } = await supabase.from('members').select('id')
+      const validMemberIds = new Set(mList?.map((m: any) => m.id) || [])
+      const rows = value
+        .filter((p: any) => p && validMemberIds.has(p.member_id))
+        .map((p: any, idx: number) => ({
+          id: p.id || `pay-${idx + 1}`,
+          receipt_number: p.receipt_number || `CFC-REC-2026-${String(idx + 1).padStart(4, '0')}`,
+          member_id: p.member_id,
+          membership_id: p.membership_id || null,
+          amount: Number(p.amount) || 0,
+          total_amount: Number(p.total_amount || p.amount) || 0,
+          pending_amount: Number(p.pending_amount) || 0,
+          discount_amount: Number(p.discount_amount) || 0,
+          payment_method: p.payment_method || 'UPI',
+          transaction_ref: p.transaction_ref || null,
+          status: p.status || 'paid',
+          payment_date: p.payment_date || new Date().toISOString().split('T')[0],
+          notes: p.notes || null,
+          recorded_by: p.recorded_by || 'CFC Staff',
+        }))
+      if (rows.length > 0) {
+        await supabase.from('payments').upsert(rows)
+      }
+    } else if (key === KEYS.MEMBERSHIPS && Array.isArray(value)) {
+      const { data: mList } = await supabase.from('members').select('id')
+      const validMemberIds = new Set(mList?.map((m: any) => m.id) || [])
+      const rows = value
+        .filter((ms: any) => ms && validMemberIds.has(ms.member_id))
+        .map((ms: any, idx: number) => ({
+          id: ms.id || `ms-${idx + 1}`,
+          member_id: ms.member_id,
+          plan_id: ms.plan_id || 'monthly',
+          start_date: ms.start_date || new Date().toISOString().split('T')[0],
+          end_date: ms.end_date || new Date().toISOString().split('T')[0],
+          amount_paid: Number(ms.amount_paid) || 0,
+          discount_amount: Number(ms.discount_amount) || 0,
+          payment_method: ms.payment_method || 'UPI',
+          status: ms.status || 'active',
+        }))
+      if (rows.length > 0) {
+        await supabase.from('memberships').upsert(rows)
+      }
+    } else if (key === KEYS.ATTENDANCE && Array.isArray(value)) {
+      const { data: mList } = await supabase.from('members').select('id')
+      const validMemberIds = new Set(mList?.map((m: any) => m.id) || [])
+      const rows = value
+        .filter((a: any) => a && validMemberIds.has(a.member_id))
+        .map((a: any, idx: number) => ({
+          id: a.id || `att-${idx + 1}`,
+          member_id: a.member_id,
+          check_in: a.check_in || a.date || new Date().toISOString(),
+          check_out: a.check_out || null,
+          method: a.method || 'manual',
+          recorded_by: a.recorded_by || 'CFC Terminal',
+        }))
+      if (rows.length > 0) {
+        await supabase.from('attendance').upsert(rows)
+      }
     } else if (key === KEYS.WORKOUTS && Array.isArray(value)) {
-      const plans = value.map((w: any) => ({
-        id: w.id,
+      const plans = value.map((w: any, idx: number) => ({
+        id: w.id || `wp-custom-${idx + 1}`,
         name: w.name,
-        category: w.category,
+        category: w.category || 'General',
         level: w.level || 'beginner',
         description: w.description || '',
         trainer_name: w.trainer_name || null,
@@ -172,26 +269,27 @@ async function syncRelationalTable(key: string, value: any): Promise<void> {
         is_default: !!w.is_default,
         is_custom: !!w.is_custom,
         created_by_role: w.created_by_role || 'admin',
-        duration_weeks: w.duration_weeks || 8,
-        days_per_week: w.days_per_week || 4,
+        duration_weeks: Number(w.duration_weeks) || 8,
+        days_per_week: Number(w.days_per_week) || 4,
         updated_at: new Date().toISOString(),
       }))
       if (plans.length > 0) {
         await supabase.from('workout_plans').upsert(plans)
       }
       const allExercises: any[] = []
-      value.forEach((w: any) => {
+      value.forEach((w: any, idx: number) => {
+        const planId = w.id || `wp-custom-${idx + 1}`
         if (Array.isArray(w.exercises)) {
-          w.exercises.forEach((ex: any) => {
+          w.exercises.forEach((ex: any, exIdx: number) => {
             allExercises.push({
-              id: ex.id,
-              plan_id: w.id,
+              id: ex.id || `${planId}-ex-${exIdx + 1}`,
+              plan_id: planId,
               name: ex.name,
-              muscle_group: ex.muscle_group,
-              sets: ex.sets || 3,
+              muscle_group: ex.muscle_group || 'General',
+              sets: Number(ex.sets) || 3,
               reps: String(ex.reps || '10 - 12'),
               weight: ex.weight || 'Bodyweight',
-              rest_seconds: ex.rest_seconds || 60,
+              rest_seconds: Number(ex.rest_seconds) || 60,
               day_of_week: ex.day_of_week || 'Monday',
               instructions: ex.instructions || '',
             })
@@ -202,21 +300,21 @@ async function syncRelationalTable(key: string, value: any): Promise<void> {
         await supabase.from('workout_exercises').upsert(allExercises)
       }
     } else if (key === KEYS.WORKOUT_ASSIGNMENTS && Array.isArray(value)) {
-      const rows = value.map((a: any) => ({
-        id: a.id,
+      const rows = value.map((a: any, idx: number) => ({
+        id: a.id || `assign-${idx + 1}`,
         member_id: a.member_id,
-        member_name: a.member_name,
-        member_code: a.member_code,
+        member_name: a.member_name || 'Member',
+        member_code: a.member_code || `CFC-2026-${String(idx + 1).padStart(4, '0')}`,
         member_phone: a.member_phone || null,
         workout_plan_id: a.workout_plan_id || null,
-        workout_plan_name: a.workout_plan_name,
+        workout_plan_name: a.workout_plan_name || 'Workout Plan',
         plan_snapshot: a.plan_snapshot || {},
         trainer_id: a.trainer_id || null,
         trainer_name: a.trainer_name || null,
         assigned_by: a.assigned_by || 'Admin Director',
         assigned_by_role: a.assigned_by_role || 'admin',
-        start_date: a.start_date,
-        end_date: a.end_date,
+        start_date: a.start_date || new Date().toISOString().split('T')[0],
+        end_date: a.end_date || new Date().toISOString().split('T')[0],
         personal_instructions: a.personal_instructions || null,
         status: a.status || 'active',
         updated_at: new Date().toISOString(),
@@ -225,11 +323,11 @@ async function syncRelationalTable(key: string, value: any): Promise<void> {
         await supabase.from('member_workout_assignments').upsert(rows)
       }
     } else if (key === KEYS.NOTIFICATIONS && Array.isArray(value)) {
-      const rows = value.map((n: any) => ({
-        id: n.id,
+      const rows = value.map((n: any, idx: number) => ({
+        id: n.id || `notif-${idx + 1}`,
         user_id: n.user_id || null,
-        title: n.title,
-        message: n.message,
+        title: n.title || 'Notice',
+        message: n.message || '',
         type: n.type || 'info',
         is_read: !!(n.is_read || n.read),
         target_audience: n.target_audience || 'all',
@@ -239,6 +337,165 @@ async function syncRelationalTable(key: string, value: any): Promise<void> {
       }))
       if (rows.length > 0) {
         await supabase.from('notifications').upsert(rows)
+      }
+    } else if (key === KEYS.ENQUIRIES && Array.isArray(value)) {
+      const rows = value.map((e: any, idx: number) => ({
+        id: e.id || `enq-${idx + 1}`,
+        reference_no: e.reference_no || `CFC-ENQ-${String(idx + 1).padStart(4, '0')}`,
+        full_name: e.full_name || 'Enquiry Lead',
+        phone: e.phone || '',
+        email: e.email || null,
+        gender: e.gender || 'other',
+        age: e.age ? String(e.age) : null,
+        interested_plan: e.interested_plan || null,
+        fitness_goal: e.fitness_goal || null,
+        message: e.message || null,
+        status: e.status || 'new',
+        lead_source: e.lead_source || 'Walk-in',
+        assigned_staff: e.assigned_staff || null,
+        follow_up_date: e.follow_up_date || null,
+        notes: e.notes || null,
+      }))
+      if (rows.length > 0) {
+        await supabase.from('enquiries').upsert(rows)
+      }
+    } else if (key === KEYS.EXPENSES && Array.isArray(value)) {
+      const rows = value.map((x: any, idx: number) => ({
+        id: x.id || `exp-${idx + 1}`,
+        category: x.category || 'Other',
+        amount: Number(x.amount) || 0,
+        expense_date: x.expense_date || new Date().toISOString().split('T')[0],
+        description: x.description || 'General expense',
+        payment_method: x.payment_method || 'UPI',
+        receipt_url: x.receipt_url || null,
+        recorded_by: x.recorded_by || 'Admin',
+      }))
+      if (rows.length > 0) {
+        await supabase.from('expenses').upsert(rows)
+      }
+    } else if (key === KEYS.DIETS && Array.isArray(value)) {
+      const dietPlans = value.map((d: any, idx: number) => ({
+        id: d.id || `diet-${idx + 1}`,
+        name: d.name || 'Custom Diet',
+        goal: d.goal || 'Fitness',
+        total_calories: Number(d.total_calories) || 2200,
+        protein_g: Number(d.protein_g) || 140,
+        carbs_g: Number(d.carbs_g) || 220,
+        fats_g: Number(d.fats_g) || 65,
+        water_liters: Number(d.water_liters) || 3.5,
+        trainer_name: d.trainer_name || null,
+        is_active: d.is_active !== false,
+      }))
+      if (dietPlans.length > 0) {
+        await supabase.from('diet_plans').upsert(dietPlans)
+      }
+      const allMeals: any[] = []
+      value.forEach((d: any, idx: number) => {
+        const dietId = d.id || `diet-${idx + 1}`
+        if (Array.isArray(d.meals)) {
+          d.meals.forEach((m: any, mIdx: number) => {
+            allMeals.push({
+              id: m.id || `${dietId}-meal-${mIdx + 1}`,
+              diet_plan_id: dietId,
+              meal_type: m.meal_type || 'Breakfast',
+              food_item: m.food_item || m.name || 'Meal Item',
+              quantity: m.quantity || '1 serving',
+              calories: Number(m.calories) || 0,
+              protein_g: Number(m.protein_g) || 0,
+              carbs_g: Number(m.carbs_g) || 0,
+              fats_g: Number(m.fats_g) || 0,
+              notes: m.notes || null,
+            })
+          })
+        }
+      })
+      if (allMeals.length > 0) {
+        await supabase.from('meal_items').upsert(allMeals)
+      }
+    } else if (key === KEYS.EXERCISE_LIBRARY && Array.isArray(value)) {
+      const rows = value.map((ex: any) => ({
+        id: ex.id,
+        name: ex.name,
+        muscle_group: ex.muscle_group || 'Chest',
+        equipment: ex.equipment || 'Barbell',
+        difficulty: (ex.difficulty || 'beginner').toLowerCase(),
+        instructions: ex.instructions || '',
+        default_sets: Number(ex.default_sets) || 3,
+        default_reps: String(ex.default_reps || '10 - 12'),
+        default_rest_seconds: Number(ex.default_rest_seconds) || 60,
+      }))
+      if (rows.length > 0) {
+        await supabase.from('exercise_library').upsert(rows)
+      }
+    } else if (key === KEYS.GALLERY && Array.isArray(value)) {
+      const rows = value.map((g: any, idx: number) => ({
+        id: g.id || `gal-${idx + 1}`,
+        category: g.category || 'Gym Area',
+        title: g.title || 'Gym Photo',
+        image: g.image,
+      }))
+      if (rows.length > 0) {
+        await supabase.from('gallery').upsert(rows)
+      }
+    } else if (key === KEYS.AUDIT_LOGS && Array.isArray(value)) {
+      const rows = value.map((l: any, idx: number) => ({
+        id: l.id || `audit-${idx + 1}`,
+        user_id: l.user_id || 'admin',
+        user_name: l.user_name || 'Admin',
+        action: l.action || 'UPDATE',
+        entity_type: l.entity_type || l.entity || 'SYSTEM',
+        entity_id: l.entity_id || null,
+        details: l.details || '',
+        created_at: l.created_at || new Date().toISOString(),
+      }))
+      if (rows.length > 0) {
+        await supabase.from('audit_logs').upsert(rows)
+      }
+    } else if (key === KEYS.PROGRESS && Array.isArray(value)) {
+      const { data: mList } = await supabase.from('members').select('id')
+      const validMemberIds = new Set(mList?.map((m: any) => m.id) || [])
+      const rows = value
+        .filter((p: any) => p && validMemberIds.has(p.member_id))
+        .map((p: any, idx: number) => ({
+          id: p.id || `prog-${idx + 1}`,
+          member_id: p.member_id,
+          recorded_date: p.recorded_date || new Date().toISOString().split('T')[0],
+          weight_kg: Number(p.weight_kg) || 0,
+          body_fat_pct: p.body_fat_pct ? Number(p.body_fat_pct) : null,
+          chest_cm: p.chest_cm ? Number(p.chest_cm) : null,
+          waist_cm: p.waist_cm ? Number(p.waist_cm) : null,
+          hips_cm: p.hips_cm ? Number(p.hips_cm) : null,
+          biceps_cm: p.biceps_cm ? Number(p.biceps_cm) : null,
+          notes: p.notes || null,
+        }))
+      if (rows.length > 0) {
+        await supabase.from('fitness_progress').upsert(rows)
+      }
+    } else if (key === KEYS.RENEWALS && Array.isArray(value)) {
+      const { data: mList } = await supabase.from('members').select('id')
+      const validMemberIds = new Set(mList?.map((m: any) => m.id) || [])
+      const rows = value
+        .filter((r: any) => r && validMemberIds.has(r.member_id))
+        .map((r: any, idx: number) => ({
+          id: r.id || `rnw-${idx + 1}`,
+          member_id: r.member_id,
+          member_name: r.member_name || 'Member',
+          member_code: r.member_code || `CFC-2026-${String(idx + 1).padStart(4, '0')}`,
+          renewal_date: r.renewal_date || new Date().toISOString().split('T')[0],
+          previous_plan_name: r.previous_plan_name || null,
+          previous_expiry_date: r.previous_expiry_date || null,
+          renewed_plan_id: r.renewed_plan_id || 'monthly',
+          renewed_plan_name: r.renewed_plan_name || 'Monthly Plan',
+          new_start_date: r.new_start_date || new Date().toISOString().split('T')[0],
+          new_expiry_date: r.new_expiry_date || new Date().toISOString().split('T')[0],
+          amount_paid: Number(r.amount_paid) || 0,
+          discount_amount: Number(r.discount_amount) || 0,
+          payment_method: r.payment_method || 'UPI',
+          receipt_number: r.receipt_number || `CFC-RNW-${String(idx + 1).padStart(4, '0')}`,
+          processed_by: r.processed_by || 'Admin Director',
+        }))
+      if (rows.length > 0) {
+        await supabase.from('membership_renewals').upsert(rows)
       }
     }
   } catch (err) {
@@ -381,6 +638,13 @@ export async function syncDatabaseWithServer(): Promise<void> {
             }
           })
 
+          // Sync all fetched cloud data into Supabase relational tables immediately
+          data.forEach((row: any) => {
+            if (row && row.key && row.data) {
+              syncRelationalTable(row.key, row.data)
+            }
+          })
+
           // Push any local keys that are not yet in Supabase
           const missingKeys = Object.values(KEYS).filter((k) => !fetchedKeys.has(k))
           if (missingKeys.length > 0) {
@@ -474,6 +738,7 @@ if (typeof window !== 'undefined') {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'cfc_store' }, (payload: any) => {
           if (payload?.new && payload.new.key) {
             localStorage.setItem(payload.new.key, JSON.stringify(payload.new.data))
+            syncRelationalTable(payload.new.key, payload.new.data)
             window.dispatchEvent(new CustomEvent('cfc_db_synced'))
           }
         })
@@ -1561,9 +1826,9 @@ function seedDatabase() {
 
   // 6. Members (Real member Yuvraj Vaidya only - No fake demo members)
   const YUVRAJ_MEMBER: Member = {
-    id: 'mem-6',
-    profile_id: 'prof-6',
-    member_id: 'CFC-2026-0006',
+    id: 'mem-1794685935997',
+    profile_id: 'prof-1794685935997',
+    member_id: 'CFC-2026-0001',
     gender: 'male',
     date_of_birth: '1998-01-01',
     address: 'Harshraj Colony, VMV Road, Amravati, Maharashtra 444604',
@@ -1572,15 +1837,15 @@ function seedDatabase() {
     registration_date: '2026-01-15',
     fitness_goal: 'Strength & Conditioning',
     status: 'active',
-    current_plan_id: 'ms-6',
+    current_plan_id: 'ms-annual',
     photo_url: null,
     email: 'yuvraj.vaidya@corpuss.com',
     password: 'CFC@2026',
-    notes: 'Registered Corpus Fitness Club Member',
+    notes: 'Director & Registered Member',
     created_at: '2026-01-15T10:00:00Z',
     updated_at: '2026-01-15T10:00:00Z',
     profile: {
-      id: 'prof-6',
+      id: 'prof-1794685935997',
       full_name: 'Yuvraj Vaidya',
       phone: '+91 76206 83995',
       email: 'yuvraj.vaidya@corpuss.com',
@@ -1590,8 +1855,8 @@ function seedDatabase() {
       updated_at: '2026-01-15T10:00:00Z',
     },
     current_plan: {
-      id: 'ms-6',
-      member_id: 'mem-6',
+      id: 'ms-annual',
+      member_id: 'mem-1794685935997',
       plan_id: 'annual',
       start_date: '2026-01-15',
       end_date: '2027-01-15',
@@ -1863,7 +2128,15 @@ export const db = {
 
     // Create New
     const newId = `mem-${Date.now()}`
-    const memberCode = `CFC-${new Date().getFullYear()}-${String(members.length + 1).padStart(4, '0')}`
+    let maxNum = 0
+    members.forEach((m) => {
+      const match = (m.member_id || '').match(/CFC-\d+-(\d+)/)
+      if (match) {
+        const num = parseInt(match[1], 10)
+        if (!isNaN(num) && num > maxNum) maxNum = num
+      }
+    })
+    const memberCode = `CFC-${new Date().getFullYear()}-${String(maxNum + 1).padStart(4, '0')}`
     const newMember: Member = {
       id: newId,
       profile_id: `prof-${Date.now()}`,
@@ -1922,6 +2195,11 @@ export const db = {
         }
         newMember.current_plan_id = msId
         newMember.current_plan = ms
+
+        // Add to memberships store so it syncs to Supabase
+        const curMemberships = getItem<Membership[]>(KEYS.MEMBERSHIPS, [])
+        curMemberships.unshift(ms)
+        setItem(KEYS.MEMBERSHIPS, curMemberships)
 
         // Add payment
         this.savePayment({
@@ -2112,6 +2390,42 @@ export const db = {
     setItem(KEYS.PLANS, plans)
   },
 
+  // Memberships
+  getMemberships(): Membership[] {
+    const list = getItem<Membership[]>(KEYS.MEMBERSHIPS, [])
+    const plans = this.getPlans()
+    const members = this.getMembers()
+    return list.map((m) => ({
+      ...m,
+      plan: m.plan || plans.find((p) => p.id === m.plan_id),
+      member: members.find((mem) => mem.id === m.member_id),
+    }))
+  },
+  saveMembership(ms: Partial<Membership>): Membership {
+    const list = getItem<Membership[]>(KEYS.MEMBERSHIPS, [])
+    const newMs: Membership = {
+      id: ms.id || `ms-${Date.now()}`,
+      member_id: ms.member_id || '',
+      plan_id: ms.plan_id || 'monthly',
+      start_date: ms.start_date || format(new Date(), 'yyyy-MM-dd'),
+      end_date: ms.end_date || format(new Date(), 'yyyy-MM-dd'),
+      amount_paid: ms.amount_paid || 0,
+      discount_amount: ms.discount_amount || 0,
+      payment_method: ms.payment_method || 'UPI',
+      status: ms.status || 'active',
+      created_at: ms.created_at || new Date().toISOString(),
+      plan: ms.plan,
+    }
+    const idx = list.findIndex((m) => m.id === newMs.id)
+    if (idx !== -1) {
+      list[idx] = newMs
+    } else {
+      list.unshift(newMs)
+    }
+    setItem(KEYS.MEMBERSHIPS, list)
+    return newMs
+  },
+
   // Payments & Receipts
   getPayments(): Payment[] {
     const payments = getItem<Payment[]>(KEYS.PAYMENTS, [])
@@ -2123,8 +2437,15 @@ export const db = {
   },
   savePayment(payment: Partial<Payment>): Payment {
     const payments = getItem<Payment[]>(KEYS.PAYMENTS, [])
-    const count = payments.length + 1
-    const receiptCode = `CFC-REC-${new Date().getFullYear()}-${String(count).padStart(4, '0')}`
+    let maxRec = 0
+    payments.forEach((p) => {
+      const match = (p.receipt_number || '').match(/CFC-REC-\d+-(\d+)/)
+      if (match) {
+        const num = parseInt(match[1], 10)
+        if (!isNaN(num) && num > maxRec) maxRec = num
+      }
+    })
+    const receiptCode = `CFC-REC-${new Date().getFullYear()}-${String(maxRec + 1).padStart(4, '0')}`
 
     const newPayment: Payment = {
       id: payment.id || `pay-${Date.now()}`,
