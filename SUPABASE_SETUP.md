@@ -1,88 +1,60 @@
-# 🏋️‍♂️ Corpus Fitness Club (CFC) — Supabase Database Setup Guide
+# 🏋️‍♂️ Corpus Fitness Club (CFC) — Supabase Clean Database Setup
 
-Complete, production-ready PostgreSQL / Supabase database setup for Corpus Fitness Club (CFC).
+Production-ready PostgreSQL / Supabase database schema for Corpus Fitness Club (CFC).  
+**100% Pure Schema — Zero Dummy / Fake Data!** (Tables remain completely clean and empty until real data is created).
 
 ---
 
 ## ⚡ 1-Click Setup Instructions (Supabase Dashboard)
 
-Aapko bas **1 minute** lagega is database ko Supabase me live karne ke liye:
-
-1. **Supabase Dashboard Kholo:**  
-   Apne browser me [https://supabase.com/dashboard](https://supabase.com/dashboard) par jao aur apna project open karo (`lqhqbyetwupgpkghhtlk`).
-2. **SQL Editor Me Jao:**  
-   Left sidebar menu me **"SQL Editor"** icon (terminal icon `>_`) par click karo.
+1. **Supabase Dashboard Kholein:**  
+   [https://supabase.com/dashboard](https://supabase.com/dashboard) par jayein aur apna project open karein (`lqhqbyetwupgpkghhtlk`).
+2. **SQL Editor Me Jayein:**  
+   Left sidebar menu me **"SQL Editor"** icon (`>_`) par click karein.
 3. **New Query Banayein:**  
-   Top me **"+ New query"** button par click karo.
-4. **Script Copy & Paste Karo:**  
-   Project ke andar `supabase/schema.sql` (ya `supabase/complete_database.sql`) ki poori file copy karo aur Supabase SQL Editor me paste kar do.
-5. **Run Click Karo:**  
-   Neeche ya upar diye gaye **"Run"** (green button ya `Ctrl + Enter`) par click karo.
+   Top me **"+ New query"** button par click karein (ya purana code poora delete kar dein).
+4. **Script Copy & Paste Karein:**  
+   `supabase/schema.sql` ka saara code copy karein aur paste kar dein.
+5. **Select All & Run Karein:**  
+   Editor me click karke `Ctrl + A` (Select All) karein aur **"Run"** (ya `Ctrl + Enter`) par click karein.
 6. **Done! 🎉**  
-   Console me aayega:  
-   `"CORPUS FITNESS CLUB DATABASE INITIALIZED SUCCESSFULLY! 26 TABLES READY WITH ROW LEVEL SECURITY & REALTIME SYNC."`
+   Console me success message aayega:  
+   `"CORPUS FITNESS CLUB CLEAN DATABASE READY! ZERO DUMMY DATA. ALL 26 TABLES INITIALIZED WITH RLS & REALTIME."`
 
 ---
 
-## 📊 Kya-kya create hoga is single script se?
+## 📊 Kya-kya create hoga is clean script se?
 
-### 1. 26 Relational Tables:
-| # | Table Name | Description |
-|---|---|---|
-| 1 | `cfc_store` | Multi-device cloud sync engine (JSON key-value store) |
-| 2 | `profiles` | User profiles with role (`super_admin`, `admin`, `trainer`, `member`, `receptionist`) |
-| 3 | `admin_profile` | Club Director profile (`Yuvraj Vaidya (Director)` & credentials) |
-| 4 | `trainers` | Professional gym coaches (certifications, bio, photo, specializations) |
-| 5 | `membership_plans` | Monthly, Quarterly, Half-Yearly & Yearly plans with prices |
-| 6 | `members` | Gym members registry with personal, medical & emergency details |
-| 7 | `memberships` | Active member subscription records with start & expiry dates |
-| 8 | `membership_renewals`| Immutable renewal history & audit logs |
-| 9 | `payments` | Fee collections, receipts, modes (UPI/Cash), transaction refs |
-| 10 | `attendance` | QR code & manual gate check-ins with timestamps |
-| 11 | `exercise_library` | 30 standard exercise library with sets, reps, equipment & instructions |
-| 12 | `workout_plans` | 7 core workout templates & custom created routines |
-| 13 | `workout_exercises` | All 39 exercises linked to workout routines |
-| 14 | `member_workout_assignments` | Routines assigned to specific members by Admin/Trainers |
-| 15 | `workout_sessions` | Daily workout logs, logged weights, reps, and volume |
-| 16 | `diet_plans` | Daily nutritional goals, target calories, and macros |
-| 17 | `meal_items` | Individual meals (Breakfast, Lunch, Dinner, Post-Workout) |
-| 18 | `enquiries` | New walk-in admissions & lead tracking |
-| 19 | `expenses` | Gym operational expenditures (Rent, Electricity, Equipment) |
-| 20 | `fitness_progress` | Weight, Body Fat %, Chest, Waist, Biceps tracking |
-| 21 | `notifications` | In-app announcements & club broadcast alerts |
-| 22 | `trainer_assignments`| Personal trainer allocation history |
-| 23 | `trainer_feedback` | Monthly performance reviews & star ratings from coaches |
-| 24 | `audit_logs` | Security & administrative activity tracking |
-| 25 | `gallery` | High-definition club facility photos |
-| 26 | `testimonials` | Real verified member reviews & PR achievements |
+### 26 Clean Relational Tables (Pure Schema, Zero Fake Rows):
+1. `cfc_store` — Multi-device real-time sync table
+2. `profiles` — User & staff profile registry
+3. `admin_profile` — Director settings & credentials
+4. `trainers` — Gym coaches & specializations
+5. `membership_plans` — Membership packages & durations
+6. `members` — Gym members registry
+7. `memberships` — Active member subscription contracts
+8. `membership_renewals` — Renewal audit logs
+9. `payments` — Fee transactions & receipts
+10. `attendance` — QR & manual check-in logs
+11. `exercise_library` — Exercise movements & muscle targets
+12. `workout_plans` — Workout routines & plans
+13. `workout_exercises` — Exercises mapped to routines
+14. `member_workout_assignments` — Assigned routines to members
+15. `workout_sessions` — Daily workout tracking logs
+16. `diet_plans` — Daily calorie & nutrition plans
+17. `meal_items` — Meals and food items
+18. `enquiries` — Admission leads & inquiries
+19. `expenses` — Gym operational expenditure
+20. `fitness_progress` — Body measurement records
+21. `notifications` — In-app alerts & broadcast notices
+22. `trainer_assignments` — Coach allocation history
+23. `trainer_feedback` — Performance reviews
+24. `audit_logs` — Activity tracking logs
+25. `gallery` — Club facility photos
+26. `testimonials` — Member reviews
 
 ---
 
 ## 🔒 Security & Real-Time Sync
-- **Row Level Security (RLS):** Har table par RLS enabled hai with safe permissive policies taaki website aur mobile dono bina kisi auth blocking ke real-time me update ho sakein.
-- **Supabase Realtime:** `cfc_store`, `members`, `payments`, `attendance`, `workout_plans`, `workout_exercises`, `member_workout_assignments` sabhi `supabase_realtime` publication me added hain. Dusre phone ya laptop par ek second ke andar updates visible honge!
-
----
-
-## 🏋️ Pre-Seeded Default Data
-1. **4 Membership Plans:**
-   - Monthly Plan: ₹700 (Men) / ₹500 (Women)
-   - Quarterly Plan: ₹1,800 (Men) / ₹1,400 (Women)
-   - Half-Yearly Plan: ₹3,200 (Men) / ₹2,500 (Women) *(Most Popular)*
-   - Yearly Plan: ₹5,000 (Men) / ₹4,000 (Women)
-2. **4 Certified Coaches:**
-   - Rohit Deshmukh (Head Strength Coach)
-   - Priya Bhagat (Senior Female Trainer)
-   - Amit Thakre (Nutrition & Conditioning)
-   - Sneha More (Zumba & Flexibility)
-3. **7 Core Workout Templates:**
-   - Push Pull Legs – Elite Split (6-Day)
-   - Beginner Workout – Foundation Protocol (3-Day)
-   - Muscle Building – Hypertrophy Program (4-Day)
-   - Weight Loss – Fat Burning Program (4-Day)
-   - Strength Training – Power Protocol (4-Day)
-   - Full Body – Functional Conditioning (3-Day)
-   - Home Workout – No Equipment (4-Day)
-4. **Director Profile & VIP Member:**
-   - Admin Director: `admin@corpuss.com` / `Admin@2026`
-   - Active Member: `Yuvraj Vaidya` (`CFC-2026-0001` / `yuvraj.vaidya@corpuss.com`, Password: `CFC@2026`)
+- **Row Level Security (RLS):** Sabhi 26 tables par public access policies configured hain taaki frontend web portal bina kisi auth block ke data read aur write kar sake.
+- **Supabase Realtime:** `cfc_store`, `members`, `memberships`, `membership_renewals`, `payments`, `attendance`, `workout_plans`, `workout_exercises`, `member_workout_assignments`, `workout_sessions`, `notifications` real-time WebSocket sync ke sath connected hain.
