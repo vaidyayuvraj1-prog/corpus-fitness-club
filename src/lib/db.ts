@@ -152,6 +152,20 @@ async function syncRelationalTable(key: string, value: any): Promise<void> {
       if (rows.length > 0) {
         await supabase.from('members').upsert(rows)
       }
+
+      // Reconcile: If any member was removed from the active list, delete them from Supabase
+      const { data: dbMembers } = await supabase.from('members').select('id, member_id')
+      if (dbMembers) {
+        const activeIds = new Set(rows.map((r: any) => r.id))
+        const activeCodes = new Set(rows.map((r: any) => r.member_id))
+        const toDelete = dbMembers.filter(
+          (m: any) => !activeIds.has(m.id) && !activeCodes.has(m.member_id)
+        )
+        if (toDelete.length > 0) {
+          const deleteIds = toDelete.map((d: any) => d.id)
+          await supabase.from('members').delete().in('id', deleteIds)
+        }
+      }
     } else if (key === KEYS.PLANS && Array.isArray(value)) {
       const rows = value.map((p: any) => ({
         id: p.id,
@@ -2222,9 +2236,68 @@ export const db = {
   },
   deleteMember(id: string): boolean {
     let members = this.getMembers()
+    const target = members.find((m) => m.id === id || m.member_id === id)
     const lenBefore = members.length
     members = members.filter((m) => m.id !== id && m.member_id !== id)
     setItem(KEYS.MEMBERS, members)
+
+    const targetId = target?.id || id
+    const targetCode = target?.member_id || id
+    const targetProfileId = target?.profile_id || target?.profile?.id
+
+    // Clean up local related records
+    try {
+      const curPayments = getItem<Payment[]>(KEYS.PAYMENTS, []).filter(
+        (p) => p.member_id !== targetId && p.member_id !== targetCode
+      )
+      setItem(KEYS.PAYMENTS, curPayments)
+
+      const curAttendance = getItem<Attendance[]>(KEYS.ATTENDANCE, []).filter(
+        (a) => a.member_id !== targetId && a.member_id !== targetCode
+      )
+      setItem(KEYS.ATTENDANCE, curAttendance)
+
+      const curMemberships = getItem<Membership[]>(KEYS.MEMBERSHIPS, []).filter(
+        (m) => m.member_id !== targetId && m.member_id !== targetCode
+      )
+      setItem(KEYS.MEMBERSHIPS, curMemberships)
+
+      const curProgress = getItem<FitnessProgress[]>(KEYS.PROGRESS, []).filter(
+        (p) => p.member_id !== targetId && p.member_id !== targetCode
+      )
+      setItem(KEYS.PROGRESS, curProgress)
+
+      const curAssignments = getItem<MemberWorkoutAssignment[]>(KEYS.WORKOUT_ASSIGNMENTS, []).filter(
+        (a) => a.member_id !== targetId && a.member_id !== targetCode
+      )
+      setItem(KEYS.WORKOUT_ASSIGNMENTS, curAssignments)
+    } catch (e) {
+      console.warn('Local cleanup error on member delete:', e)
+    }
+
+    // Direct deletion from Supabase cloud database
+    if (isSupabaseConfigured && supabase) {
+      ;(async () => {
+        try {
+          // Delete from relational members table (triggers ON DELETE CASCADE in PostgreSQL)
+          await supabase.from('members').delete().or(`id.eq.${targetId},member_id.eq.${targetCode}`)
+
+          if (targetProfileId) {
+            await supabase.from('profiles').delete().eq('id', targetProfileId)
+          }
+
+          // Clean up related foreign key tables directly to guarantee clean state
+          await supabase.from('payments').delete().or(`member_id.eq.${targetId},member_id.eq.${targetCode}`)
+          await supabase.from('attendance').delete().or(`member_id.eq.${targetId},member_id.eq.${targetCode}`)
+          await supabase.from('memberships').delete().or(`member_id.eq.${targetId},member_id.eq.${targetCode}`)
+          await supabase.from('fitness_progress').delete().or(`member_id.eq.${targetId},member_id.eq.${targetCode}`)
+          await supabase.from('member_workout_assignments').delete().or(`member_id.eq.${targetId},member_id.eq.${targetCode}`)
+        } catch (err) {
+          console.error('Supabase member delete error:', err)
+        }
+      })()
+    }
+
     return members.length < lenBefore
   },
 
@@ -2388,6 +2461,9 @@ export const db = {
   deletePlan(id: string): void {
     const plans = this.getPlans().filter((p) => p.id !== id)
     setItem(KEYS.PLANS, plans)
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('membership_plans').delete().eq('id', id).then(() => {}, () => {})
+    }
   },
 
   // Memberships
@@ -2472,6 +2548,9 @@ export const db = {
   deletePayment(id: string): void {
     const payments = getItem<Payment[]>(KEYS.PAYMENTS, []).filter((p) => p.id !== id)
     setItem(KEYS.PAYMENTS, payments)
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('payments').delete().eq('id', id).then(() => {}, () => {})
+    }
   },
 
   // Attendance
@@ -2523,6 +2602,9 @@ export const db = {
   deleteAttendance(attendanceId: string): void {
     const records = getItem<Attendance[]>(KEYS.ATTENDANCE, []).filter((a) => a.id !== attendanceId)
     setItem(KEYS.ATTENDANCE, records)
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('attendance').delete().eq('id', attendanceId).then(() => {}, () => {})
+    }
   },
 
   // Trainers
@@ -2603,6 +2685,9 @@ export const db = {
   deleteTrainer(id: string): void {
     const trainers = this.getTrainers().filter((t) => t.id !== id)
     setItem(KEYS.TRAINERS, trainers)
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('trainers').delete().eq('id', id).then(() => {}, () => {})
+    }
   },
   assignPTClient(
     memberId: string,
@@ -2734,6 +2819,9 @@ export const db = {
   deleteEnquiry(id: string): void {
     const enquiries = this.getEnquiries().filter((e) => e.id !== id)
     setItem(KEYS.ENQUIRIES, enquiries)
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('enquiries').delete().eq('id', id).then(() => {}, () => {})
+    }
   },
 
   // Expenses
@@ -2760,6 +2848,9 @@ export const db = {
     let expenses = this.getExpenses()
     expenses = expenses.filter((e) => e.id !== id)
     setItem(KEYS.EXPENSES, expenses)
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('expenses').delete().eq('id', id).then(() => {}, () => {})
+    }
   },
 
   // Workouts & Diets
@@ -2816,6 +2907,9 @@ export const db = {
     }
     const workouts = this.getWorkouts().filter((w) => w.id !== id)
     setItem(KEYS.WORKOUTS, workouts)
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('workout_plans').delete().eq('id', id).then(() => {}, () => {})
+    }
   },
 
   getDiets(): DietPlan[] {
@@ -2852,6 +2946,9 @@ export const db = {
   deleteDiet(id: string): void {
     const diets = this.getDiets().filter((d) => d.id !== id)
     setItem(KEYS.DIETS, diets)
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('diet_plans').delete().eq('id', id).then(() => {}, () => {})
+    }
   },
 
   // Fitness Progress
@@ -3016,6 +3113,9 @@ export const db = {
     seedDatabase()
     const list = this.getNotifications().filter((n) => n.id !== id)
     setItem(KEYS.NOTIFICATIONS, list)
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('notifications').delete().eq('id', id).then(() => {}, () => {})
+    }
   },
 
   markNotificationRead(id: string): void {
@@ -3973,6 +4073,9 @@ export const db = {
   deleteGalleryItem(id: string): any[] {
     const list = this.getGallery().filter((i) => i.id !== id)
     setItem(KEYS.GALLERY, list)
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('gallery').delete().eq('id', id).then(() => {}, () => {})
+    }
     return list
   },
 
